@@ -1,0 +1,16 @@
+## Interface: 30400
+## Title: GroupFinderImprovements
+## Notes: 
+## Author: ThePettsoN
+## Version: 0.1.0
+## DefaultState: Enabled
+## LoadOnDemand: 0
+## SavedVariables: GroupFinderImprovementsDB
+## X-Curse-Project-ID: 659020
+## X-Wago-ID: RaN0Al6j
+
+embeds.xml
+
+src/core.lua
+src/gui.lua
+src/db.lua
