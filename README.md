@@ -1,7 +1,7 @@
 ## GroupFinderImprovements
  
 ### Overview
-GroupFinderImprovements is an addon to help you improve Blizzards built in Group Finder tool. It allows you to, for instance, filter by group composition, automatically refresh the results, and blacklist players.
+GroupFinderImprovements is a addon to help you improve Blizzards built in Group Finder tool. It allows you for instance to filter by group composition, automatically refresh the results, or blacklist specific players.
  
 ### Features
 - Auto-refresh the search results

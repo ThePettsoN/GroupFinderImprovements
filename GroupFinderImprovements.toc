@@ -2,12 +2,12 @@
 ## Title: GroupFinderImprovements
 ## Notes: 
 ## Author: ThePettsoN
-## Version: 0.3.0
+## Version: 0.3.1
 ## DefaultState: Enabled
 ## LoadOnDemand: 0
 ## SavedVariables: GroupFinderImprovementsDB
-## X-Curse-Project-ID: 659020
-## X-Wago-ID: RaN0Al6j
+## X-Curse-Project-ID: 666681
+## X-Wago-ID: rkGrkANy
 
 embeds.xml
 
