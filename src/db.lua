@@ -6,7 +6,7 @@ GroupFinderImprovements.Core:RegisterModule("Db", Db, "AceEvent-3.0")
 local DEFAULTS = {
     profile = {
 		blacklist = {},
-		refresh_interval = 2,
+		refresh_interval = 5,
     },
     char = {
 		filters = {

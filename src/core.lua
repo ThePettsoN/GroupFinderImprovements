@@ -43,13 +43,14 @@ function Core:OnEnable()
 	self:RegisterMessage("ConfigChanged", "OnConfigChanged")
 	self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnPlayerEnteringWorld")
 	self:RegisterEvent("LFG_LIST_SEARCH_RESULTS_RECEIVED", "OnLFGListSearchResultsReceived")
+	self:RegisterEvent("LFG_LIST_SEARCH_RESULT_UPDATED", "OnLFGListSearchResultReceived")
 	self:OnConfigChanged()
 end
 
 function Core:OnPlayerEnteringWorld()
 	self:_createRefreshButton()
 
-	for name, module in self:IterateModules() do
+	for _, module in self:IterateModules() do
 		if module.OnPlayerEnteringWorld then
 			module:OnPlayerEnteringWorld()
 		end
@@ -118,7 +119,17 @@ function Core:OnConfigChanged(event, category, key, value, ...)
 	self:_onSortSearchResults(self._latestResults)
 end
 
+function Core:_updateStaleResults()
+	local dataProvider = CreateDataProvider();
+	local results = self._latestResults;
+	for index = 1, #results do
+		dataProvider:Insert({resultID=results[index]});
+	end
+	LFGBrowseFrame.ScrollBox:SetDataProvider(dataProvider, ScrollBoxConstants.RetainScrollPosition);
+end
+
 function Core:OnLFGListSearchResultsReceived()
+	GroupFinderImprovements.dprint("OnLFGListSearchResultsReceived: Addon Running: %q | Refresh Interval: %q | Timer Running: %q", tostring(self._autoRefreshRunning), tostring(self._autoRefreshInterval), tostring(self._autoRefreshTimer ~= nil))
 	if self._autoRefreshTimer then
 		self:CancelTimer(self._autoRefreshTimer)
 		self._autoRefreshTimer = nil
@@ -131,6 +142,55 @@ function Core:OnLFGListSearchResultsReceived()
 	if not self._autoRefreshButton:IsEnabled() then
 		self._autoRefreshButton:Enable()
 	end
+end
+
+function Core:OnLFGListSearchResultReceived(event, resultId)
+	GroupFinderImprovements.dprint("OnLFGListSearchResultReceived: %q", resultId)
+	local searchInfo = C_LFGList.GetSearchResultInfo(resultId)
+	if self:_shouldFilter(resultId, searchInfo) then
+		for i = 1, #self._latestResults do
+			if self._latestResults[i] == resultId then
+				GroupFinderImprovements.dprint("New filtered entry removed")
+				tremove(self._latestResults, i)
+				self:_updateStaleResults()
+				break
+			end
+		end
+	end
+end
+
+function Core:_shouldFilter(id, searchInfo)
+	if searchInfo.hasSelf then
+		return false
+	end
+
+	local leaderName = searchInfo.leaderName
+	local numMembers = searchInfo.numMembers
+
+	if searchInfo.isDelisted then
+		GroupFinderImprovements.dprint("Filter entry. Reason: IsDelisted | Id: %q | LeaderName %q", id, leaderName)
+		return true
+	elseif (self._min_members and self._min_members > numMembers) or (self._max_members and self._max_members < numMembers) then
+		GroupFinderImprovements.dprint("Filter entry. Reason: Members out of bounds (%d) | Id: %q | LeaderName %q", numMembers, id, leaderName)
+		return true
+	else
+		local memberCounts = C_LFGList.GetSearchResultMemberCounts(id)
+		if (self._min_tanks and self._min_tanks > memberCounts.TANK) or (self._max_tanks and self._max_tanks < memberCounts.TANK) then
+			GroupFinderImprovements.dprint("Filter entry. Reason: Tanks out of bounds (%d) | Id: %q | LeaderName %q", memberCounts.TANK, id, leaderName)
+			return true
+		elseif (self._min_healers and self._min_healers > memberCounts.HEALER) or (self._max_healers and self._max_healers < memberCounts.HEALER) then
+			GroupFinderImprovements.dprint("Filter entry. Reason: Healers out of bounds (%d) | Id: %q | LeaderName %q", memberCounts.HEALER, id, leaderName)
+			return true
+		elseif (self._min_dps and self._min_dps > memberCounts.DAMAGER) or (self._max_dps and self._max_dps < memberCounts.DAMAGER) then
+			GroupFinderImprovements.dprint("Filter entry. Reason: DPS out of bounds (%d) | Id: %q | LeaderName %q", memberCounts.DAMAGER, id, leaderName)
+			return true
+		elseif self._blacklistedPlayers[leaderName] then
+			GroupFinderImprovements.dprint("Filter entry. Reason: Leader blacklisted | Id: %q | LeaderName %q", id, leaderName)
+			return true
+		end
+	end
+	
+	return false
 end
 
 function Core:_onRefreshButtonClick(frame, ...)
@@ -149,6 +209,7 @@ function Core:_onRefreshButtonClick(frame, ...)
 end
 
 function Core:_onTimer()
+	GroupFinderImprovements.dprint("OnTimer: Addon Running: %q", tostring(self._autoRefreshRunning))
 	if self._autoRefreshRunning then
 		LFGBrowseFrameRefreshButton:Click()
 		self._autoRefreshTimer = nil
@@ -156,30 +217,13 @@ function Core:_onTimer()
 end
 
 function Core:_onSortSearchResults(results)
+	GroupFinderImprovements.dprint("OnSortSearchResults: Num Results: %d", #results)
 	local getSearchResultInfo = C_LFGList.GetSearchResultInfo
 	for i = #results, 1, -1 do
 		local id = results[i]
 		local searchInfo = getSearchResultInfo(id)
-		if not searchInfo.hasSelf then
-			local leaderName = searchInfo.leaderName
-			local numMembers = searchInfo.numMembers
-
-			if searchInfo.isDelisted then
-				tremove(results, i)
-			elseif (self._min_members and self._min_members > numMembers) or (self._max_members and self._max_members < numMembers) then
-				tremove(results, i)
-			else
-				local memberCounts = C_LFGList.GetSearchResultMemberCounts(id)
-				if (self._min_tanks and self._min_tanks > memberCounts.TANK) or (self._max_tanks and self._max_tanks < memberCounts.TANK) then
-					tremove(results, i)
-				elseif (self._min_healers and self._min_healers > memberCounts.HEALER) or (self._max_healers and self._max_healers < memberCounts.HEALER) then
-					tremove(results, i)
-				elseif (self._min_dps and self._min_dps > memberCounts.DAMAGER) or (self._max_dps and self._max_dps < memberCounts.DAMAGER) then
-					tremove(results, i)
-				elseif self._blacklistedPlayers[leaderName] then
-					tremove(results, i)
-				end
-			end
+		if self:_shouldFilter(id, searchInfo) then
+			tremove(results, i)
 		end
 	end
 
@@ -188,6 +232,7 @@ end
 
 function Core:_onGetSearchEntryMenu(frame, resultId)
 	if not self._contextMenuModified then
+		GroupFinderImprovements.dprint("Populate ContextMenu")
 		self._contextMenuModified = true
 
 		local menu = LFGBrowseFrame:GetSearchEntryMenu(resultId)
@@ -211,13 +256,7 @@ function Core:_onGetSearchEntryMenu(frame, resultId)
 end
 
 function Core:_onBlackListPlayer(_, id, name)
+	GroupFinderImprovements.dprint("Blacklist Player: Name: %q | id: %q", name, id)
 	GroupFinderImprovements.Db:SetProfileData(name, true, "blacklist")
-
-
-	local dataProvider = CreateDataProvider();
-	local results = self._latestResults;
-	for index = 1, #results do
-		dataProvider:Insert({resultID=results[index]});
-	end
-	LFGBrowseFrame.ScrollBox:SetDataProvider(dataProvider, ScrollBoxConstants.RetainScrollPosition);
+	self:_updateStaleResults()
 end
