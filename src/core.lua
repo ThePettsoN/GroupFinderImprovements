@@ -36,6 +36,18 @@ local ROLES = {
 		PRIEST = true,
 		SHAMAN = true,
 		DRUID = true,
+	},
+	DAMAGER = {
+		WARRIOR = true,
+		PALADIN = true,
+		HUNTER = true,
+		ROGUE = true,
+		PRIEST = true,
+		DEATHKNIGHT = true,
+		SHAMAN = true,
+		MAGE = true,
+		WARLOCK = true,
+		DRUID = true,
 	}
 }
 
@@ -64,6 +76,7 @@ end
 
 function Core:OnPlayerEnteringWorld()
 	self:_createRefreshButton()
+	self:_disableRoleSelection()
 
 	for _, module in self:IterateModules() do
 		if module.OnPlayerEnteringWorld then
@@ -328,4 +341,23 @@ function Core:_onBlackListPlayer(_, id, name)
 	GroupFinderImprovements.dprint("Blacklist Player: Name: %q | id: %q", name, id)
 	GroupFinderImprovements.Db:SetProfileData(name, true, "blacklist")
 	self:_updateStaleResults()
+end
+
+function Core:_disableRoleSelection()
+	local _, class, _ = UnitClass("player")
+
+	local children = { LFGListingFrameSoloRoleButtons:GetChildren() }
+	for _, frame in pairs(children) do
+		if not ROLES[frame.roleID][class] then
+			local checkButton = frame.CheckButton
+			if checkButton then
+				checkButton:Disable()
+				checkButton:GetNormalTexture():SetDesaturated(true)
+				checkButton:SetChecked(false)
+			end
+
+			frame:GetNormalTexture():SetDesaturated(true)
+			_G[frame:GetName() .. "Background"]:SetDesaturated(true)
+		end
+	end
 end

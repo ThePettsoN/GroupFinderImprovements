@@ -284,7 +284,7 @@ function Gui:_createDpsGUI()
     local db = GroupFinderImprovements.Db
 
     local label, minBox, maxBox = self:_createGUI()
-    label.alignoffset = 32
+    label.alignoffset = 22
     minBox.alignoffset = 32
     maxBox.alignoffset = 32
 
