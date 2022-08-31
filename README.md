@@ -13,7 +13,9 @@ GroupFinderImprovements is a addon to help you improve Blizzards built in Group 
 GroupFinderImprovements comes with its own window that is linked with Blizzard's Group Finder tool. It allows you to easily set change the parameters on the fly. It also adds new buttons to the Group Finder tool to display/hide the addon, as well as start or stop the auto-refresher.
 
 ### Known Limitations
-Unfortunately due to some decision from Blizzard it's impossible to extract the comments from each entry and filter based on it. That means there's no clear way of removing advertisement entries automatically.
+- Unfortunately due to some decision from Blizzard it's impossible to extract the comments from each entry and filter based on it. That means there's no clear way of removing advertisement entries automatically.
+
+- Since it's possible for players to check all roles even if they're not able to fulfill that specific position (eg. a priest checking 'Tank') the filter will not always seem to be working as it should.
 
 ### Known Issues/Missing features
 Please check the issue tracker for all known issues and wanted features not yet implemented.
