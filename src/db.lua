@@ -5,19 +5,39 @@ GroupFinderImprovements.Core:RegisterModule("Db", Db, "AceEvent-3.0")
 
 local DEFAULTS = {
     profile = {
+		blacklist = {},
+		refresh_interval = 2,
     },
     char = {
+		filters = {
+			members = {
+				min = nil,
+				max = nil,
+			},
+			tanks = {
+				min = nil,
+				max = nil,
+			},
+			healers = {
+				min = nil,
+				max = nil,
+			},
+			dps = {
+				min = nil,
+				max = nil,
+			}
+		},
 	},
 }
 
 function Db:OnInitialize()
     self._db = LibStub("AceDB-3.0"):New("GroupFinderImprovementsDB", DEFAULTS)
-	self._db.RegisterCallback(self, "OnProfileReset", "OnProfileChanged")
-	self._db.RegisterCallback(self, "OnProfileChanged", "OnProfileChanged")
+	self._db.RegisterCallback(self, "OnProfileReset", "_onProfileChanged")
+	self._db.RegisterCallback(self, "OnProfileChanged", "_onProfileChanged")
 end
 
-function Db:OnProfileChanged()
-	self:SendMessage("ConfigChange")
+function Db:_onProfileChanged(...)
+	self:SendMessage("ConfigChanged", ...)
 end
 
 function Db:SetCharacterData(key, value, ...)
@@ -26,6 +46,7 @@ function Db:SetCharacterData(key, value, ...)
 		data = data[select(i, ...)]
 	end
 	data[key] = value
+	self:_onProfileChanged("character", key, value, ...)
 end
 
 function Db:GetCharacterData(...)
@@ -42,6 +63,7 @@ function Db:SetProfileData(key, value, ...)
 		data = data[select(i, ...)]
 	end
 	data[key] = value
+	self:_onProfileChanged("profile", key, value, ...)
 end
 
 function Db:GetProfileData(...)

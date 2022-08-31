@@ -2,7 +2,7 @@
 ## Title: GroupFinderImprovements
 ## Notes: 
 ## Author: ThePettsoN
-## Version: 0.1.0
+## Version: 0.2.0
 ## DefaultState: Enabled
 ## LoadOnDemand: 0
 ## SavedVariables: GroupFinderImprovementsDB
@@ -10,6 +10,8 @@
 ## X-Wago-ID: RaN0Al6j
 
 embeds.xml
+
+src/widgets/AceGUILayout-OffsetList.lua
 
 src/core.lua
 src/gui.lua
