@@ -95,17 +95,17 @@ end
 function Core:OnConfigChanged(event, category, key, value, ...)
 	local db = GroupFinderImprovements.Db
 
-	self._min_members = db:GetCharacterData("filters", "members", "min")
-	self._max_members = db:GetCharacterData("filters", "members", "max")
+	self._min_members = db:GetCharacterData("filters", "members", "min") or 0
+	self._max_members = db:GetCharacterData("filters", "members", "max") or 999
 
-	self._min_tanks = db:GetCharacterData("filters", "tanks", "min")
-	self._max_tanks = db:GetCharacterData("filters", "tanks", "max")
+	self._min_tanks = db:GetCharacterData("filters", "tanks", "min") or 0
+	self._max_tanks = db:GetCharacterData("filters", "tanks", "max") or 999
 	
-	self._min_healers = db:GetCharacterData("filters", "healers", "min")
-	self._max_healers = db:GetCharacterData("filters", "healers", "max")
+	self._min_healers = db:GetCharacterData("filters", "healers", "min") or 0
+	self._max_healers = db:GetCharacterData("filters", "healers", "max") or 999
 
-	self._min_dps = db:GetCharacterData("filters", "dps", "min")
-	self._max_dps = db:GetCharacterData("filters", "dps", "max")
+	self._min_dps = db:GetCharacterData("filters", "dps", "min") or 0
+	self._max_dps = db:GetCharacterData("filters", "dps", "max") or 999
 
 	self._blacklistedPlayers = db:GetProfileData("blacklist")
 	local autoRefreshInterval = db:GetProfileData("refresh_interval")
@@ -120,12 +120,14 @@ function Core:OnConfigChanged(event, category, key, value, ...)
 end
 
 function Core:_updateStaleResults()
-	local dataProvider = CreateDataProvider();
-	local results = self._latestResults;
-	for index = 1, #results do
-		dataProvider:Insert({resultID=results[index]});
+	if LFGBrowseFrame then
+		local dataProvider = CreateDataProvider();
+		local results = self._latestResults;
+		for index = 1, #results do
+			dataProvider:Insert({resultID=results[index]});
+		end
+		LFGBrowseFrame.ScrollBox:SetDataProvider(dataProvider, ScrollBoxConstants.RetainScrollPosition);
 	end
-	LFGBrowseFrame.ScrollBox:SetDataProvider(dataProvider, ScrollBoxConstants.RetainScrollPosition);
 end
 
 function Core:OnLFGListSearchResultsReceived()
@@ -147,7 +149,7 @@ end
 function Core:OnLFGListSearchResultReceived(event, resultId)
 	GroupFinderImprovements.dprint("OnLFGListSearchResultReceived: %q", resultId)
 	local searchInfo = C_LFGList.GetSearchResultInfo(resultId)
-	if self:_shouldFilter(resultId, searchInfo) then
+	if searchInfo and self:_shouldFilter(resultId, searchInfo) then
 		for i = 1, #self._latestResults do
 			if self._latestResults[i] == resultId then
 				GroupFinderImprovements.dprint("New filtered entry removed")
@@ -160,28 +162,25 @@ function Core:OnLFGListSearchResultReceived(event, resultId)
 end
 
 function Core:_shouldFilter(id, searchInfo)
-	if searchInfo.hasSelf then
-		return false
-	end
-
 	local leaderName = searchInfo.leaderName
 	local numMembers = searchInfo.numMembers
 
 	if searchInfo.isDelisted then
 		GroupFinderImprovements.dprint("Filter entry. Reason: IsDelisted | Id: %q | LeaderName %q", id, leaderName)
 		return true
-	elseif (self._min_members and self._min_members > numMembers) or (self._max_members and self._max_members < numMembers) then
+	elseif self._min_members > numMembers or self._max_members < numMembers then
 		GroupFinderImprovements.dprint("Filter entry. Reason: Members out of bounds (%d) | Id: %q | LeaderName %q", numMembers, id, leaderName)
 		return true
 	else
 		local memberCounts = C_LFGList.GetSearchResultMemberCounts(id)
-		if (self._min_tanks and self._min_tanks > memberCounts.TANK) or (self._max_tanks and self._max_tanks < memberCounts.TANK) then
+
+		if self._min_tanks > memberCounts.TANK or self._max_tanks < memberCounts.TANK then
 			GroupFinderImprovements.dprint("Filter entry. Reason: Tanks out of bounds (%d) | Id: %q | LeaderName %q", memberCounts.TANK, id, leaderName)
 			return true
-		elseif (self._min_healers and self._min_healers > memberCounts.HEALER) or (self._max_healers and self._max_healers < memberCounts.HEALER) then
+		elseif self._min_healers > memberCounts.HEALER or self._max_healers < memberCounts.HEALER then
 			GroupFinderImprovements.dprint("Filter entry. Reason: Healers out of bounds (%d) | Id: %q | LeaderName %q", memberCounts.HEALER, id, leaderName)
 			return true
-		elseif (self._min_dps and self._min_dps > memberCounts.DAMAGER) or (self._max_dps and self._max_dps < memberCounts.DAMAGER) then
+		elseif self._min_dps > memberCounts.DAMAGER or self._max_dps < memberCounts.DAMAGER then
 			GroupFinderImprovements.dprint("Filter entry. Reason: DPS out of bounds (%d) | Id: %q | LeaderName %q", memberCounts.DAMAGER, id, leaderName)
 			return true
 		elseif self._blacklistedPlayers[leaderName] then
@@ -228,6 +227,7 @@ function Core:_onSortSearchResults(results)
 	end
 
 	self._latestResults = results
+	self:_updateStaleResults()
 end
 
 function Core:_onGetSearchEntryMenu(frame, resultId)
@@ -246,12 +246,49 @@ function Core:_onGetSearchEntryMenu(frame, resultId)
 			end
 		}
 		tinsert(menu, #menu, self._contextMenuBlacklist)
+
+		if GroupFinderImprovements.DEBUG then
+			self._debugContext = {
+				text = "Debug Entry",
+				notCheckable = true,
+				arg1 = nil,
+				arg2 = nil,
+				func = function(_, id, name)
+					print(string.format("TEST: %s", menu[1].text))
+					local searchInfo = C_LFGList.GetSearchResultInfo(id)
+					local memberCounts = C_LFGList.GetSearchResultMemberCounts(id)
+					print(string.format("id: %d", id))
+					print(string.format("name: %s", searchInfo.leaderName))
+					print(string.format("DAMAGER: %d", memberCounts.DAMAGER))
+					print(string.format("DAMAGER_REMAINING: %d", memberCounts.DAMAGER_REMAINING))
+					print(string.format("TANK: %d", memberCounts.TANK))
+					print(string.format("TANK_REMAINING: %d", memberCounts.TANK_REMAINING))
+					print(string.format("HEALER: %d", memberCounts.HEALER))
+					print(string.format("HEALER_REMAINING: %d", memberCounts.HEALER_REMAINING))
+					print(string.format("NOROLE: %d", memberCounts.NOROLE))
+
+					print(string.format("Members: Min %d | Max: %d", self._min_members, self._max_members))
+					print(string.format("Tanks: Min %d | Max: %d", self._min_tanks, self._max_tanks))
+					print(string.format("Healers: Min %d | Max: %d", self._min_healers, self._max_healers))
+					print(string.format("DPS: Min %d | Max: %d", self._min_dps, self._max_dps))
+				end
+			}
+			tinsert(menu, #menu, self._debugContext)
+		end
 	end
 
 	if self._contextMenuBlacklist then
 		local searchResultInfo = C_LFGList.GetSearchResultInfo(resultId)
 		self._contextMenuBlacklist.arg1 = resultId
 		self._contextMenuBlacklist.arg2 = searchResultInfo.leaderName
+	end
+
+	if GroupFinderImprovements.DEBUG then
+		if self._debugContext then
+			local searchResultInfo = C_LFGList.GetSearchResultInfo(resultId)
+			self._debugContext.arg1 = resultId
+			self._debugContext.arg2 = searchResultInfo.leaderName
+		end
 	end
 end
 
