@@ -24,6 +24,21 @@ local CreateDataProvider = CreateDataProvider
 local Core = LibStub("AceAddon-3.0"):NewAddon("GroupFinderImprovementsCore", "AceEvent-3.0", "AceTimer-3.0")
 GroupFinderImprovements.Core = Core
 
+local ROLES = {
+	TANK = {
+		PALADIN = true,
+		WARRIOR = true,
+		DRUID = true,
+		DEATHKNIGHT = true,
+	},
+	HEALER = {
+		PALADIN = true,
+		PRIEST = true,
+		SHAMAN = true,
+		DRUID = true,
+	}
+}
+
 function Core:OnInitialize()
 	GroupFinderImprovements.Const = {
 		ElvUI = _G.ElvUI ~= nil
@@ -161,9 +176,16 @@ function Core:OnLFGListSearchResultReceived(event, resultId)
 	end
 end
 
+local numTanks, numHealers, numDPS = 0, 0, 0
+local TANK_ROLE = "TANK"
+local HEALER_ROLE = "HEALER"
 function Core:_shouldFilter(id, searchInfo)
 	local leaderName = searchInfo.leaderName
 	local numMembers = searchInfo.numMembers
+
+	if not leaderName then
+		return false
+	end
 
 	if searchInfo.isDelisted then
 		GroupFinderImprovements.dprint("Filter entry. Reason: IsDelisted | Id: %q | LeaderName %q", id, leaderName)
@@ -172,16 +194,26 @@ function Core:_shouldFilter(id, searchInfo)
 		GroupFinderImprovements.dprint("Filter entry. Reason: Members out of bounds (%d) | Id: %q | LeaderName %q", numMembers, id, leaderName)
 		return true
 	else
-		local memberCounts = C_LFGList.GetSearchResultMemberCounts(id)
+		numTanks, numHealers, numDPS = 0, 0, 0
+		for i = 1, numMembers do
+			local _, role, classFile, _, level = C_LFGList.GetSearchResultMemberInfo(id, i)
+			if role == TANK_ROLE and ROLES.TANK[classFile] then
+				numTanks = numTanks + 1
+			elseif role == HEALER_ROLE and ROLES.HEALER[classFile] then
+				numHealers = numHealers + 1
+			else
+				numDPS = numDPS + 1
+			end
+		end
 
-		if self._min_tanks > memberCounts.TANK or self._max_tanks < memberCounts.TANK then
-			GroupFinderImprovements.dprint("Filter entry. Reason: Tanks out of bounds (%d) | Id: %q | LeaderName %q", memberCounts.TANK, id, leaderName)
+		if self._min_tanks > numTanks or self._max_tanks < numTanks then
+			GroupFinderImprovements.dprint("Filter entry. Reason: Tanks out of bounds (%d) | Id: %q | LeaderName %q", numTanks, id, leaderName)
 			return true
-		elseif self._min_healers > memberCounts.HEALER or self._max_healers < memberCounts.HEALER then
-			GroupFinderImprovements.dprint("Filter entry. Reason: Healers out of bounds (%d) | Id: %q | LeaderName %q", memberCounts.HEALER, id, leaderName)
+		elseif self._min_healers > numHealers or self._max_healers < numHealers then
+			GroupFinderImprovements.dprint("Filter entry. Reason: Healers out of bounds (%d) | Id: %q | LeaderName %q", numHealers, id, leaderName)
 			return true
-		elseif self._min_dps > memberCounts.DAMAGER or self._max_dps < memberCounts.DAMAGER then
-			GroupFinderImprovements.dprint("Filter entry. Reason: DPS out of bounds (%d) | Id: %q | LeaderName %q", memberCounts.DAMAGER, id, leaderName)
+		elseif self._min_dps > numDPS or self._max_dps < numDPS then
+			GroupFinderImprovements.dprint("Filter entry. Reason: DPS out of bounds (%d) | Id: %q | LeaderName %q", numDPS, id, leaderName)
 			return true
 		elseif self._blacklistedPlayers[leaderName] then
 			GroupFinderImprovements.dprint("Filter entry. Reason: Leader blacklisted | Id: %q | LeaderName %q", id, leaderName)
