@@ -11,8 +11,6 @@
 
 embeds.xml
 
-src/widgets/AceGUILayout-OffsetList.lua
-
 src/core.lua
 src/gui.lua
 src/db.lua

@@ -1,8 +1,11 @@
 local _, GroupFinderImprovements = ...
 local AceGUI = LibStub("AceGUI-3.0")
 
-local stringformat = string.format
-local wipe = wipe
+-- Lua API
+local tremove = tremove
+
+-- WoW API
+local CreateFrame = CreateFrame
 
 local Gui = {}
 GroupFinderImprovements.Core:RegisterModule("Gui", Gui, "AceEvent-3.0")
@@ -31,23 +34,25 @@ function Gui:OnConfigButtonClick(buttonFrame)
 end
 
 function Gui:_createConfigButton()
-    local children = { LFGParentFrame:GetChildren() }
+    local lfgParentFrame = LFGParentFrame
+
+    local children = { lfgParentFrame:GetChildren() }
     for i = 1, #children do
         local child = children[i]
         if child.GetPushedTexture and child:GetPushedTexture() and not child:GetName() then
-            local expandButton = CreateFrame("Button", nil, LFGParentFrame, "UIPanelCloseButtonNoScripts")
+            local expandButton = CreateFrame("Button", nil, lfgParentFrame, "UIPanelCloseButtonNoScripts")
             expandButton:SetPoint("RIGHT", child, "LEFT", 8, 0)
             expandButton:SetWidth(child:GetWidth() - 2)
             expandButton:SetHeight(child:GetHeight() - 2)
-            expandButton:SetScript("OnClick", function(frame, ...) self:OnConfigButtonClick(frame, true, ...) end)
-            -- expandButton:Hide()
+            expandButton:SetScript("OnClick", function(frame, ...) self:OnConfigButtonClick(frame) end)
+            expandButton:Hide()
 
-            local collapseButton = CreateFrame("Button", nil, LFGParentFrame, "UIPanelCloseButtonNoScripts")
+            local collapseButton = CreateFrame("Button", nil, lfgParentFrame, "UIPanelCloseButtonNoScripts")
             collapseButton:SetPoint("RIGHT", child, "LEFT", 8, 0)
             collapseButton:SetWidth(child:GetWidth() - 2)
             collapseButton:SetHeight(child:GetHeight() - 2)
-            collapseButton:SetScript("OnClick", function(frame, ...) self:OnConfigButtonClick(frame, false, ...) end)
-            -- collapseButton:Hide()
+            collapseButton:SetScript("OnClick", function(frame, ...) self:OnConfigButtonClick(frame) end)
+            collapseButton:Hide()
 
             self._expandConfigButton = expandButton
             self._collapseConfigButton = collapseButton
@@ -71,7 +76,6 @@ function Gui:OnFrameVisibilityToggle(show)
         self:_createConfigButton()
     end
 
-    local button = self._expandConfigButton
     if show then
         self._expandConfigButton:Hide()
         self._collapseConfigButton:Show()

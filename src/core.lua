@@ -12,10 +12,14 @@ end
 local tRemove = table.remove
 local stringformat = string.format
 local stringgmatch = string.gmatch
-local strlower = strlower
-local wipe = wipe
+local tremove = tremove
+local tinsert = tinsert
 
 -- WoW API
+local hooksecurefunc = hooksecurefunc
+local CreateFrame = CreateFrame
+local C_LFGList = C_LFGList
+local CreateDataProvider = CreateDataProvider
 
 local Core = LibStub("AceAddon-3.0"):NewAddon("GroupFinderImprovementsCore", "AceEvent-3.0", "AceTimer-3.0")
 GroupFinderImprovements.Core = Core
