@@ -255,7 +255,14 @@ end
 
 function BrowseImprovements:OnLFGListSearchResultReceived(event, resultId)
 	GroupFinderImprovements:dprint(Debug.Severity.INFO, "OnLFGListSearchResultReceived | Result Id: %d", resultId)
+
+	if LFGBrowseFrame.searching then -- TODO: These should potential be stored for later
+		GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "Results are updating. Ignore individual updates")
+		return
+	end
+
 	if #self._storedResults == 0 then
+		GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "No stored results yet. Ignore individual updates")
 		return
 	end
 
