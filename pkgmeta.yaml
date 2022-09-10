@@ -42,3 +42,4 @@ ignore:
     - .gitignore
     - GroupFinderImprovements.code-workspace
     - TODO.txt
+    - pkgmeta.yaml
