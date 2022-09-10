@@ -8,6 +8,7 @@ local Debug = GroupFinderImprovements.Debug
 -- Lua API
 local tremove = tremove
 local hooksecurefunc = hooksecurefunc
+local tinsert = tinsert
 
 -- WoW API
 local CreateFrame = CreateFrame
@@ -15,21 +16,27 @@ local CreateDataProvider = CreateDataProvider
 local C_LFGList = C_LFGList
 
 function BrowseImprovements:OnInitialize()
-    self._autoRefreshRunning = false
+	self._autoRefreshButton = nil
 	self._autoRefreshInterval = 2
-	self._autoRefreshTimer = nil
-    self._autoRefreshButton = nil
-    self._isRefreshing = false
+	self._autoRefreshTimerHandle = nil
+	self._autoRefreshIsRunning = false
 
-    self._contextMenuBlacklist = nil
-	self._contextMenuModified = false
-
+	self._storedResults = {}
 	self._blacklistedPlayers = {}
 
-	self._latestResults = {}
+	self._contextMenuModified = false
+	self._contextMenuBlacklistEntry = nil
+
+	self._filters = {
+		numMembers = { 0, 999 },
+		numTanks = { 0, 999 },
+		numHealers = { 0, 999 },
+		numDamagers = { 0, 999 },
+	}
 end
 
 function BrowseImprovements:OnEnable()
+	GroupFinderImprovements:dprint(Debug.Severity.INFO, "Module \"BrowseImprovements\" enabled")
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnPlayerEnteringWorld")
 	self:RegisterEvent("LFG_LIST_SEARCH_RESULTS_RECEIVED", "OnLFGListSearchResultsReceived")
 	self:RegisterEvent("LFG_LIST_SEARCH_RESULT_UPDATED", "OnLFGListSearchResultReceived")
@@ -39,6 +46,11 @@ function BrowseImprovements:OnEnable()
 end
 
 function BrowseImprovements:CreateRefreshButton()
+	if self._autoRefreshButton then
+		GroupFinderImprovements:dprint(Debug.Severity.WARNING, "Tried to create refresh button, already exists")
+		return
+	end
+
 	local searchButton = LFGBrowseFrameRefreshButton
 
 	local button = CreateFrame("Button", nil, LFGBrowseFrame)
@@ -56,89 +68,184 @@ function BrowseImprovements:CreateRefreshButton()
 	button:SetHighlightTexture("Interface/Buttons/UI-Common-MouseHilight")
 	button:SetDisabledTexture("Interface/Buttons/UI-SpellbookIcon-NextPage-Up")
 
-	button:SetScript("OnClick", function(frame, ...) self:OnRefreshButtonClick(frame, ...) end)
 	button:Disable()
 	button:GetDisabledTexture():SetDesaturated(true)
+	button:SetScript("OnClick", function(frame, ...)
+		self:RefreshButtonClick(frame, ...)
+	end)
 
 	self._autoRefreshButton = button
+	GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "Auto refresh button created")
 end
 
-function BrowseImprovements:UpdateStaleResults()
+function BrowseImprovements:RefreshButtonClick(frame, ...)
+	GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "Auto refresh button clicked")
+	if self._autoRefreshIsRunning then
+		frame:SetNormalTexture("Interface/Buttons/UI-SpellbookIcon-NextPage-Up")
+		self:StopAutoRefresh()
+	else
+		frame:SetNormalTexture("Interface/TimeManager/PauseButton")
+		self:StartAutoRefresh()
+	end
+end
+
+function BrowseImprovements:StopAutoRefresh()
+	GroupFinderImprovements:dprint(Debug.Severity.INFO, "Stopping auto refresh")
+
+	self._autoRefreshIsRunning = false
+	self:AbortTimer()
+end
+
+function BrowseImprovements:StartAutoRefresh()
+	GroupFinderImprovements:dprint(Debug.Severity.INFO, "Starting auto refresh")
+
+	self._autoRefreshIsRunning = true
+	if self._autoRefreshTimerHandle then
+		GroupFinderImprovements:dprint(Debug.Severity.WARNING, "Trying to start auto refresh with timer already enabled")
+		self:CancelTimer(self._autoRefreshTimerHandle)
+		self._autoRefreshTimerHandle = nil
+	end
+
+	self:OnAutoRefreshTimerTick()
+end
+
+function BrowseImprovements:AbortTimer()
+	if self._autoRefreshTimerHandle then
+		self:CancelTimer(self._autoRefreshTimerHandle)
+		self._autoRefreshTimerHandle = nil
+	end
+end
+
+local function filterNumericalRange(range, value)
+	return value >= range[1] and value <= range[2]
+end
+
+local numRoles = {
+	[Const.RolesLookup.Tank] = 0,
+	[Const.RolesLookup.Healer] = 0,
+	[Const.RolesLookup.Damager] = 0,
+}
+function BrowseImprovements:CheckFilterSearchResult(id, searchInfo)
+	local leaderName = searchInfo.leaderName
+	local numMembers = searchInfo.numMembers
+
+	if not leaderName then
+		GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "Failed to get leaderName %q for search result %q", tostring(leaderName), id)
+	end
+
+	local filters = self._filters
+
+	if searchInfo.isDelisted then
+		GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "Filter entry. Reason: IsDelisted | Id: %q | LeaderName %q", id, tostring(leaderName))
+		return true
+	elseif not filterNumericalRange(filters.numMembers, numMembers) then
+		GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "Filter entry. Reason: Members out of bounds (%d) | Id: %q | LeaderName %q", numMembers, id, tostring(leaderName))
+		return true
+	else
+		numRoles[Const.RolesLookup.Tank] = 0
+		numRoles[Const.RolesLookup.Healer] = 0
+		numRoles[Const.RolesLookup.Damager] = 0
+
+		local getSearchResultMemberInfo = C_LFGList.GetSearchResultMemberInfo
+		for i = 1, numMembers do
+			local name, role, classFile, _, level = getSearchResultMemberInfo(id, i)
+			if name and role then
+				if Const.Roles[role][classFile] then
+					-- GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "%q (%s) counts as %q", name, classFile, role)
+					numRoles[role] = numRoles[role] + 1
+				else
+					-- GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "%q (%s) is not allowed as %q. Count as %q", name, classFile, role, Const.RolesLookup.Damager)
+					numRoles[Const.RolesLookup.Damager] = numRoles[Const.RolesLookup.Damager] + 1
+				end
+			else
+				-- GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "%q (%s) failed to get role %q. Count as %q", tostring(name), tostring(classFile), tostring(role), Const.RolesLookup.Damager)
+				numRoles[Const.RolesLookup.Damager] = numRoles[Const.RolesLookup.Damager] + 1
+			end
+		end
+
+		if not filterNumericalRange(filters.numTanks, numRoles[Const.RolesLookup.Tank]) then
+			GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "Filter entry. Reason: Tanks out of bounds (%d) | Id: %q | LeaderName %q", numRoles[Const.RolesLookup.Tank], id, tostring(leaderName))
+			return true
+		end
+		if not filterNumericalRange(filters.numHealers, numRoles[Const.RolesLookup.Healer]) then
+			GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "Filter entry. Reason: Healers out of bounds (%d) | Id: %q | LeaderName %q", numRoles[Const.RolesLookup.Healer], id, tostring(leaderName))
+			return true
+		end
+		if not filterNumericalRange(filters.numDamagers, numRoles[Const.RolesLookup.Damager]) then
+			GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "Filter entry. Reason: Damagers out of bounds (%d) | Id: %q | LeaderName %q", numRoles[Const.RolesLookup.Damager], id, tostring(leaderName))
+			return true
+		end
+	end
+
+	return false
+end
+
+function BrowseImprovements:CheckFilterBlacklistPlayers(id, searchInfo)
+	local leaderName = searchInfo.leaderName
+
+	if not leaderName then
+		return false
+	end
+
+	if self._blacklistedPlayers[leaderName] then
+		GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "Filter entry. Reason: Leader blacklisted | Id: %q | LeaderName %q", id, leaderName)
+		return true
+	end
+
+	return false
+end
+
+function BrowseImprovements:UpdateStoredResults()
 	if LFGBrowseFrame then
 		local dataProvider = CreateDataProvider()
-		local results = self._latestResults;
+		local results = self._storedResults
 		for index = 1, #results do
-			dataProvider:Insert({resultID=results[index]})
+			dataProvider:Insert({ resultID = results[index] })
 		end
 
 		LFGBrowseFrame.ScrollBox:SetDataProvider(dataProvider, ScrollBoxConstants.RetainScrollPosition)
 	end
 end
 
-local numTanks, numHealers, numDPS = 0, 0, 0
-function BrowseImprovements:ShouldFilter(id, searchInfo)
-	local leaderName = searchInfo.leaderName
-	local numMembers = searchInfo.numMembers
+function BrowseImprovements:BlacklistPlayer(_, searchResultId, name)
+	GroupFinderImprovements:dprint(Debug.Severity.INFO, "Blacklist Player: Name: %q | id: %q", name, searchResultId)
 
-	if not leaderName then
-		return false
-	end
+	GroupFinderImprovements.Db:SetProfileData(name, true, "blacklist")
 
-	if searchInfo.isDelisted then
-		GroupFinderImprovements:dprint(Debug.Severity.INFO, "Filter entry. Reason: IsDelisted | Id: %q | LeaderName %q", id, leaderName)
-		return true
-	elseif self._min_members > numMembers or self._max_members < numMembers then
-		GroupFinderImprovements:dprint(Debug.Severity.INFO, "Filter entry. Reason: Members out of bounds (%d) | Id: %q | LeaderName %q", numMembers, id, leaderName)
-		return true
-	else
-		numTanks, numHealers, numDPS = 0, 0, 0
-		for i = 1, numMembers do
-			local _, role, classFile, _, level = C_LFGList.GetSearchResultMemberInfo(id, i)
-			if role == Const.RolesLookup.Tank and Const.Roles[Const.RolesLookup.Tank][classFile] then
-				numTanks = numTanks + 1
-            elseif role == Const.RolesLookup.Healer and Const.Roles[Const.RolesLookup.Healer][classFile] then
-				numHealers = numHealers + 1
-			else
-				numDPS = numDPS + 1
-			end
-		end
-
-		if self._min_tanks > numTanks or self._max_tanks < numTanks then
-			GroupFinderImprovements:dprint(Debug.Severity.INFO, "Filter entry. Reason: Tanks out of bounds (%d) | Id: %q | LeaderName %q", numTanks, id, leaderName)
-			return true
-		elseif self._min_healers > numHealers or self._max_healers < numHealers then
-			GroupFinderImprovements:dprint(Debug.Severity.INFO, "Filter entry. Reason: Healers out of bounds (%d) | Id: %q | LeaderName %q", numHealers, id, leaderName)
-			return true
-		elseif self._min_dps > numDPS or self._max_dps < numDPS then
-			GroupFinderImprovements:dprint(Debug.Severity.INFO, "Filter entry. Reason: DPS out of bounds (%d) | Id: %q | LeaderName %q", numDPS, id, leaderName)
-			return true
-		elseif self._blacklistedPlayers[leaderName] then
-			GroupFinderImprovements:dprint(Debug.Severity.INFO, "Filter entry. Reason: Leader blacklisted | Id: %q | LeaderName %q", id, leaderName)
-			return true
+	for i = 1, #self._storedResults do
+		if self._storedResults[i] == searchResultId then
+			tremove(self._storedResults, i)
+			break
 		end
 	end
-	
-	return false
+
+	self:UpdateStoredResults()
 end
 
 function BrowseImprovements:OnPlayerEnteringWorld()
     self:CreateRefreshButton()
 
-    hooksecurefunc("LFGBrowseUtil_SortSearchResults", function(results) self:OnSortSearchResults(results) end)
+	hooksecurefunc("LFGBrowseUtil_SortSearchResults", function(results)
+		self:OnSortSearchResults(results)
+	end)
 	hooksecurefunc(LFGBrowseFrame, "GetSearchEntryMenu", function(frame, resultID)
 		self:OnGetSearchEntryMenu(frame, resultID)
 	end)
 end
 
 function BrowseImprovements:OnLFGListSearchResultsReceived()
-	GroupFinderImprovements:dprint(Debug.Severity.INFO, "OnLFGListSearchResultsReceived: Addon Running: %q | Refresh Interval: %q | Timer Running: %q", tostring(self._autoRefreshRunning), tostring(self._autoRefreshInterval), tostring(self._autoRefreshTimer ~= nil))
-	if self._autoRefreshTimer then
-		self:CancelTimer(self._autoRefreshTimer)
-		self._autoRefreshTimer = nil
-	end
+	GroupFinderImprovements:dprint(Debug.Severity.INFO, "OnLFGListSearchResultsReceived")
+	GroupFinderImprovements:dprint(
+		Debug.Severity.DEBUG,
+		"Auto Refresh Running: %q | Refresh Interval: %q | Timer Handle: %q",
+		tostring(self._autoRefreshIsRunning),
+		tostring(self._autoRefreshInterval),
+		tostring(self._autoRefreshTimerHandle ~= nil)
+	)
 
-	if self._autoRefreshRunning then
-		self._autoRefreshTimer = self:ScheduleTimer(self.OnTimer, self._autoRefreshInterval, self)
+	self:AbortTimer()
+	if self._autoRefreshIsRunning then
+		self._autoRefreshTimerHandle = self:ScheduleTimer(self.OnAutoRefreshTimerTick, self._autoRefreshInterval, self)
 	end
 
 	if not self._autoRefreshButton:IsEnabled() then
@@ -147,39 +254,49 @@ function BrowseImprovements:OnLFGListSearchResultsReceived()
 end
 
 function BrowseImprovements:OnLFGListSearchResultReceived(event, resultId)
-    if #self._latestResults == 0 then
-        print("Return early")
-        return
-    end
+	GroupFinderImprovements:dprint(Debug.Severity.INFO, "OnLFGListSearchResultReceived | Result Id: %d", resultId)
+	if #self._storedResults == 0 then
+		return
+	end
 
-	GroupFinderImprovements:dprint(Debug.Severity.INFO, "OnLFGListSearchResultReceived: %q", resultId)
 	local searchInfo = C_LFGList.GetSearchResultInfo(resultId)
-	if searchInfo and self:ShouldFilter(resultId, searchInfo) then
-		for i = 1, #self._latestResults do
-			if self._latestResults[i] == resultId then
-				GroupFinderImprovements:dprint(Debug.Severity.INFO, "New filtered entry removed")
-				tremove(self._latestResults, i)
-				self:UpdateStaleResults()
+	if not searchInfo then
+		GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "Failed to get search info from resultId %d", resultId)
+		return
+	end
+
+	local entriesFiltered = false
+	if self:CheckFilterSearchResult(resultId, searchInfo) or self:CheckFilterBlacklistPlayers(resultId, searchInfo) then
+		entriesFiltered = true
+		for i = 1, #self._storedResults do
+			if self._storedResults[i] == resultId then
+				tremove(self._storedResults, i)
 				break
 			end
 		end
+	end
+
+	if entriesFiltered then
+		self:UpdateStoredResults()
 	end
 end
 
 function BrowseImprovements:OnConfigChanged(event, category, key, value, ...)
 	local db = GroupFinderImprovements.Db
+	local dbFilters = db:GetCharacterData("filters")
+	local filters = self._filters
 
-	self._min_members = db:GetCharacterData("filters", "members", "min") or 0
-	self._max_members = db:GetCharacterData("filters", "members", "max") or 999
+	filters.numMembers[1] = dbFilters.members.min or 0
+	filters.numMembers[2] = dbFilters.members.max or 999
 
-	self._min_tanks = db:GetCharacterData("filters", "tanks", "min") or 0
-	self._max_tanks = db:GetCharacterData("filters", "tanks", "max") or 999
-	
-	self._min_healers = db:GetCharacterData("filters", "healers", "min") or 0
-	self._max_healers = db:GetCharacterData("filters", "healers", "max") or 999
+	filters.numTanks[1] = dbFilters.tanks.min or 0
+	filters.numTanks[2] = dbFilters.tanks.max or 999
 
-	self._min_dps = db:GetCharacterData("filters", "dps", "min") or 0
-	self._max_dps = db:GetCharacterData("filters", "dps", "max") or 999
+	filters.numHealers[1] = dbFilters.healers.min or 0
+	filters.numHealers[2] = dbFilters.healers.max or 999
+
+	filters.numDamagers[1] = dbFilters.dps.min or 0
+	filters.numDamagers[2] = dbFilters.dps.max or 999
 
 	self._blacklistedPlayers = db:GetProfileData("blacklist")
 	local autoRefreshInterval = db:GetProfileData("refresh_interval")
@@ -189,98 +306,101 @@ function BrowseImprovements:OnConfigChanged(event, category, key, value, ...)
 			self:OnLFGListSearchResultsReceived()
 		end
 	end
-
-	self:OnSortSearchResults(self._latestResults)
 end
 
-function BrowseImprovements:OnBlackListPlayer(_, id, name)
-	GroupFinderImprovements:dprint(Debug.Severity.INFO, "Blacklist Player: Name: %q | id: %q", name, id)
-	GroupFinderImprovements.Db:SetProfileData(name, true, "blacklist")
-	self:UpdateStaleResults()
-end
+function BrowseImprovements:OnAutoRefreshTimerTick()
+	GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "OnAutoRefreshTimerTick | Refresh Running: %q", tostring(self._autoRefreshIsRunning))
 
-function BrowseImprovements:OnRefreshButtonClick(frame, ...)
-	if self._autoRefreshRunning then
-		self._autoRefreshRunning = false
-		frame:SetNormalTexture("Interface/Buttons/UI-SpellbookIcon-NextPage-Up")
-		if self._autoRefreshTimer then
-			self:CancelTimer(self._autoRefreshTimer)
-			self._autoRefreshTimer = nil
-		end
-	else
-		self._autoRefreshRunning = true
-		frame:SetNormalTexture("Interface/TimeManager/PauseButton")
-		self:OnTimer()
-	end
-end
-
-function BrowseImprovements:OnTimer()
-	GroupFinderImprovements:dprint(Debug.Severity.INFO, "OnTimer: Addon Running: %q", tostring(self._autoRefreshRunning))
-	if self._autoRefreshRunning then
+	if self._autoRefreshIsRunning then
+		self._autoRefreshTimerHandle = nil
 		LFGBrowseFrameRefreshButton:Click()
-		self._autoRefreshTimer = nil
+	elseif self._autoRefreshTimerHandle then
+		GroupFinderImprovements:dprint(Debug.Severity.WARNING, "Got auto refresh timer tick with refresh disabled but timer handle is still defined")
+		self._autoRefreshTimerHandle = nil
 	end
 end
 
 function BrowseImprovements:OnSortSearchResults(results)
-	GroupFinderImprovements:dprint(Debug.Severity.INFO, "OnSortSearchResults: Num Results: %d", #results)
+	if not results then
+		return
+	end
+
+	GroupFinderImprovements:dprint(Debug.Severity.INFO, "OnSortSearchResults | Num Results: %d", #results)
+
 	local getSearchResultInfo = C_LFGList.GetSearchResultInfo
+	local entriesFiltered = false
 	for i = #results, 1, -1 do
 		local id = results[i]
 		local searchInfo = getSearchResultInfo(id)
-		if self:ShouldFilter(id, searchInfo) then
+
+		if self:CheckFilterSearchResult(id, searchInfo) or self:CheckFilterBlacklistPlayers(id, searchInfo) then
 			tremove(results, i)
+			entriesFiltered = true
 		end
 	end
 
-	self._latestResults = results
-	self:UpdateStaleResults()
+	self._storedResults = results
+	if entriesFiltered then
+		self:UpdateStoredResults()
+	end
 end
 
 function BrowseImprovements:OnGetSearchEntryMenu(frame, resultId)
+	-- GroupFinderImprovements:dprint(Debug.Severity.INFO, "OnGetSearchEntryMenu | ResultId: %d", resultId)
+
 	if not self._contextMenuModified then
-		GroupFinderImprovements:dprint(Debug.Severity.INFO, "Populate ContextMenu")
-		self._contextMenuModified = true
-
+		self._contextMenuModified = true -- Need to be above everything else to prevent a infinite recursive loop
 		local menu = LFGBrowseFrame:GetSearchEntryMenu(resultId)
-		self._contextMenuBlacklist = {
-			text = "Blacklist Leader",
-			notCheckable = true,
-			arg1 = nil,
-			arg2 = nil,
-			func = function(_, id, name)
-				self:OnBlackListPlayer(_, id, name)
-			end
-		}
-		tinsert(menu, #menu, self._contextMenuBlacklist)
-
-		if GroupFinderImprovements:DebugEnabled() then
-			self._debugContext = {
-				text = "Debug Entry",
-				notCheckable = true,
-				arg1 = nil,
-				arg2 = nil,
-				func = function(_, id, name)
-					local searchInfo = C_LFGList.GetSearchResultInfo(id)
-					local memberCounts = C_LFGList.GetSearchResultMemberCounts(id)
-					GroupFinderImprovements:tDump(searchInfo)
-				end
-			}
-			tinsert(menu, #menu, self._debugContext)
-		end
+		self:CreateBlacklistContextMenu(menu)
+		self:CreateDebugContextMenu(menu)
 	end
 
-	if self._contextMenuBlacklist then
+	if self._contextMenuBlacklistEntry then
 		local searchResultInfo = C_LFGList.GetSearchResultInfo(resultId)
-		self._contextMenuBlacklist.arg1 = resultId
-		self._contextMenuBlacklist.arg2 = searchResultInfo.leaderName
+		self._contextMenuBlacklistEntry.arg1 = resultId
+		self._contextMenuBlacklistEntry.arg2 = searchResultInfo.leaderName
 	end
 
-	if GroupFinderImprovements:DebugEnabled() then
-		if self._debugContext then
-			local searchResultInfo = C_LFGList.GetSearchResultInfo(resultId)
-			self._debugContext.arg1 = resultId
-			self._debugContext.arg2 = searchResultInfo.leaderName
-		end
+	if self._contextMenuDebugEntry then
+		local searchResultInfo = C_LFGList.GetSearchResultInfo(resultId)
+		self._contextMenuDebugEntry.arg1 = resultId
+		self._contextMenuDebugEntry.arg2 = searchResultInfo.leaderName
 	end
+end
+
+function BrowseImprovements:CreateBlacklistContextMenu(menu)
+	GroupFinderImprovements:dprint(Debug.Severity.INFO, "Populating context menu - Blacklist")
+
+	self._contextMenuBlacklistEntry = {
+		text = "Blacklist Leader",
+		notCheckable = true,
+		arg1 = nil,
+		arg2 = nil,
+		func = function(_, searchResultId, name)
+			self:BlacklistPlayer(_, searchResultId, name)
+		end
+	}
+
+	tinsert(menu, #menu, self._contextMenuBlacklistEntry) -- Want this inserted at next to last position. Cancel should remain last
+end
+
+function BrowseImprovements:CreateDebugContextMenu(menu)
+	if not GroupFinderImprovements:DebugEnabled() then
+		return
+	end
+
+	GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "Populating context menu - Debug")
+	self._contextMenuDebugEntry = {
+		text = "Debug Entry",
+		notCheckable = true,
+		arg1 = nil,
+		arg2 = nil,
+		func = function(_, searchResultId, name)
+			local searchInfo = C_LFGList.GetSearchResultInfo(searchResultId)
+			GroupFinderImprovements:tDump(searchInfo)
+			GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "Id: %d", searchResultId)
+		end
+	}
+
+	tinsert(menu, #menu, self._contextMenuDebugEntry)
 end
