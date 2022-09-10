@@ -1,6 +1,5 @@
 ## Interface: 30400
 ## Title: GroupFinderImprovements
-## Notes: 
 ## Author: ThePettsoN
 ## Version: 0.6.0
 ## DefaultState: Enabled
@@ -14,3 +13,5 @@ embeds.xml
 src/core.lua
 src/gui.lua
 src/db.lua
+src/modules/browseImprovements.lua
+src/modules/listingImprovements.lua

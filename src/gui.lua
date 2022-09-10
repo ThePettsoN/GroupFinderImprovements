@@ -16,6 +16,7 @@ function Gui:OnInitialize()
 end
 
 function Gui:OnEnable()
+    self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnPlayerEnteringWorld")
     self:RegisterMessage("ConfigChanged", "OnConfigChanged")
 end
 

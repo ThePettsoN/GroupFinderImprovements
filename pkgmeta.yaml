@@ -30,6 +30,10 @@ externals:
         url: https://repos.curseforge.com/wow/ace3/trunk/AceGUI-3.0
         tag: latest
 
+    libs/LibThePettsonDebugTools:
+        url: https://github.com/ThePettsoN/LibThePettsonDebugTools
+        tag: latest
+
 ignore:
     - .git
     - .gitignore
