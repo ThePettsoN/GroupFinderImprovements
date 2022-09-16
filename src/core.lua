@@ -6,7 +6,7 @@ GroupFinderImprovements.Core = Core
 local DebugTools = LibStub:GetLibrary("ThePettsonDebugTools-1.0", true)
 local Debug = DebugTools:New(GroupFinderImprovements, TOCNAME)
 GroupFinderImprovements.Debug = Debug
-GroupFinderImprovements:SetDebug(true)
+GroupFinderImprovements:SetDebug(false)
 
 local Const = {
 	RolesLookup = {
