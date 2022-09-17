@@ -129,6 +129,10 @@ function BrowseImprovements:CheckFilterSearchResult(id, searchInfo)
 	local leaderName = searchInfo.leaderName
 	local numMembers = searchInfo.numMembers
 
+	if searchInfo.hasSelf then
+		return false
+	end
+
 	if not leaderName then
 		GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "Failed to get leaderName %q for search result %q", tostring(leaderName), id)
 	end
