@@ -33,6 +33,7 @@ function ListingImprovements:OnInitialize()
 end
 
 function ListingImprovements:OnEnable()
+	GroupFinderImprovements:dprint(Debug.Severity.INFO, "Module \"ListingImprovements\" enabled")
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnPlayerEnteringWorld")
 
     self:RegisterMessage("ConfigChanged", "OnConfigChanged")
@@ -41,7 +42,6 @@ end
 
 function ListingImprovements:OnPlayerEnteringWorld()
 	self:UpdateAllowedRoles()
-	self:RefreshSavedInstances()
 
 	hooksecurefunc("LFGListingActivityView_UpdateActivities", function(frame, categoryId)
 		self:OnUpdateListningsActivities(frame, categoryId)
@@ -57,6 +57,8 @@ function ListingImprovements:OnPlayerEnteringWorld()
 	hooksecurefunc("LFGListingActivityView_InitActivityGroupButton", function()
 		GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "LFGListingActivityView_InitActivityGroupButton")
 	end)
+
+	LFGListingFrame:HookScript("OnShow", function(...) self:OnListningFrameShow(...) end)
 end
 
 function ListingImprovements:OnConfigChanged(event, category, key, value, ...)
@@ -86,8 +88,10 @@ function ListingImprovements:RefreshSavedInstances()
 	wipe(self._savedInstances)
 
 	local numSavedInstances = GetNumSavedInstances()
+	GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "RefreshSavedInstances - num saved instances: %d", numSavedInstances)
 	for i = 1, numSavedInstances do
 		local name = GetSavedInstanceInfo(i)
+		GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "RefreshSavedInstances - %q", name)
 		self._savedInstances[#self._savedInstances + 1] = name
 	end
 end
@@ -188,6 +192,10 @@ function ListingImprovements:OnDataRangeChanged(scrollFrame)
 			end
 		end
 	end
+end
+
+function ListingImprovements:OnListningFrameShow()
+	self:RefreshSavedInstances()
 end
 
 function ListingImprovements:SetScrollBoxEntryEnabled(frame, enabled, activityId)
