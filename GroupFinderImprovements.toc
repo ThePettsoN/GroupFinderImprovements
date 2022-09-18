@@ -1,7 +1,7 @@
 ## Interface: 30400
 ## Title: GroupFinderImprovements
 ## Author: ThePettsoN
-## Version: 1.0.1
+## Version: 1.0.2
 ## DefaultState: Enabled
 ## LoadOnDemand: 0
 ## SavedVariables: GroupFinderImprovementsDB
