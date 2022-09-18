@@ -14,6 +14,7 @@ local tinsert = tinsert
 local CreateFrame = CreateFrame
 local CreateDataProvider = CreateDataProvider
 local C_LFGList = C_LFGList
+local C_FriendList = C_FriendList
 
 function BrowseImprovements:OnInitialize()
 	self._autoRefreshButton = nil
@@ -25,7 +26,7 @@ function BrowseImprovements:OnInitialize()
 	self._blacklistedPlayers = {}
 
 	self._contextMenuModified = false
-	self._contextMenuBlacklistEntry = nil
+	self._contextMenuEntires = {}
 
 	self._filters = {
 		numMembers = { 0, 999 },
@@ -362,61 +363,54 @@ function BrowseImprovements:RunFilters(results)
 end
 
 function BrowseImprovements:OnGetSearchEntryMenu(frame, resultId)
-	-- GroupFinderImprovements:dprint(Debug.Severity.INFO, "OnGetSearchEntryMenu | ResultId: %d", resultId)
-
 	if not self._contextMenuModified then
 		self._contextMenuModified = true -- Need to be above everything else to prevent a infinite recursive loop
 		local menu = LFGBrowseFrame:GetSearchEntryMenu(resultId)
-		self:CreateBlacklistContextMenu(menu)
-		self:CreateDebugContextMenu(menu)
+
+		self:CreateContextMenuEntry(menu, "Who {leaderName}", "WhoLookup", true)
+		self:CreateContextMenuEntry(menu, "Blacklist {leaderName}", "BlacklistPlayer", true)
+		self:CreateContextMenuEntry(menu, "Debug Entry", "DebugEntry", false, true)
 	end
 
-	if self._contextMenuBlacklistEntry then
-		local searchResultInfo = C_LFGList.GetSearchResultInfo(resultId)
-		self._contextMenuBlacklistEntry.arg1 = resultId
-		self._contextMenuBlacklistEntry.arg2 = searchResultInfo.leaderName
-	end
-
-	if self._contextMenuDebugEntry then
-		local searchResultInfo = C_LFGList.GetSearchResultInfo(resultId)
-		self._contextMenuDebugEntry.arg1 = resultId
-		self._contextMenuDebugEntry.arg2 = searchResultInfo.leaderName
-	end
-end
-
-function BrowseImprovements:CreateBlacklistContextMenu(menu)
-	GroupFinderImprovements:dprint(Debug.Severity.INFO, "Populating context menu - Blacklist")
-
-	self._contextMenuBlacklistEntry = {
-		text = "Blacklist Leader",
-		notCheckable = true,
-		arg1 = nil,
-		arg2 = nil,
-		func = function(_, searchResultId, name)
-			self:BlacklistPlayer(_, searchResultId, name)
+	local searchResultInfo = C_LFGList.GetSearchResultInfo(resultId)
+	local leaderName = searchResultInfo.leaderName
+	for i = 1, #self._contextMenuEntires do
+		local entry = self._contextMenuEntires[i]
+		if entry.origText then
+			entry.text = entry.origText:gsub("{leaderName}", leaderName)
 		end
-	}
 
-	tinsert(menu, #menu, self._contextMenuBlacklistEntry) -- Want this inserted at next to last position. Cancel should remain last
+		entry.arg1 = resultId
+		entry.arg2 = leaderName
+	end
 end
 
-function BrowseImprovements:CreateDebugContextMenu(menu)
-	if not GroupFinderImprovements:DebugEnabled() then
+function BrowseImprovements:CreateContextMenuEntry(menu, text, funcName, insertLeaderName, debugOnly) -- TODO: Might want to verify that we're not creating duplicates in the future
+	if debugOnly and not GroupFinderImprovements:DebugEnabled() then
 		return
 	end
 
-	GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "Populating context menu - Debug")
-	self._contextMenuDebugEntry = {
-		text = "Debug Entry",
+	GroupFinderImprovements:dprint(Debug.Severity.INFO, "Populating context menu with %q", text)
+	local entry = {
+		origText = insertLeaderName and text,
+		text = text,
 		notCheckable = true,
-		arg1 = nil,
-		arg2 = nil,
-		func = function(_, searchResultId, name)
-			local searchInfo = C_LFGList.GetSearchResultInfo(searchResultId)
-			GroupFinderImprovements:tDump(searchInfo)
-			GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "Id: %d", searchResultId)
-		end
+		args1 = nil,
+		args2 = nil,
+		func = function(...) self[funcName](self, ...) end
 	}
 
-	tinsert(menu, #menu, self._contextMenuDebugEntry)
+	self._contextMenuEntires[#self._contextMenuEntires + 1] = entry
+	tinsert(menu, #menu, entry) -- Always want to insert this at the second to last position as we want the 'Cancel' to remain last
+	return entry
+end
+
+function BrowseImprovements:WhoLookup(_, searchResultId, name)
+	C_FriendList.SendWho(name)
+end
+
+function BrowseImprovements:DebugEntry(_, searchResultId, name)
+	local searchInfo = C_LFGList.GetSearchResultInfo(searchResultId)
+	GroupFinderImprovements:tDump(searchInfo)
+	GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "Id: %d", searchResultId)
 end
