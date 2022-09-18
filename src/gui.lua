@@ -146,19 +146,19 @@ function Gui:_createMembersSection()
     groupLabel:SetText("Group Composition")
     groupLabel:SetFontObject(GameFontNormal)
     groupLabel:SetColor(1.0, 0.82, 0.0)
-    
+
     local minLabel = AceGUI:Create("Label")
     minLabel:SetRelativeWidth(0.25)
     minLabel:SetText("Min")
     minLabel:SetFontObject(GameFontNormal)
     minLabel:SetColor(1.0, 0.82, 0.0)
-    
+
     local maxLabel = AceGUI:Create("Label")
     maxLabel:SetRelativeWidth(0.25)
     maxLabel:SetText("Max")
     maxLabel:SetFontObject(GameFontNormal)
     maxLabel:SetColor(1.0, 0.82, 0.0)
-    
+
     self._container:AddChild(groupLabel)
     self._container:AddChild(minLabel)
     self._container:AddChild(maxLabel)

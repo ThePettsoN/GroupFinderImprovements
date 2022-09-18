@@ -317,6 +317,8 @@ function BrowseImprovements:OnConfigChanged(event, category, key, value, ...)
 			self:OnLFGListSearchResultsReceived()
 		end
 	end
+
+	self:RunFilters(self._storedResults)
 end
 
 function BrowseImprovements:OnAutoRefreshTimerTick()
@@ -337,7 +339,10 @@ function BrowseImprovements:OnSortSearchResults(results)
 	end
 
 	GroupFinderImprovements:dprint(Debug.Severity.INFO, "OnSortSearchResults | Num Results: %d", #results)
+	self:RunFilters(results)
+end
 
+function BrowseImprovements:RunFilters(results)
 	local getSearchResultInfo = C_LFGList.GetSearchResultInfo
 	local entriesFiltered = false
 	for i = #results, 1, -1 do
