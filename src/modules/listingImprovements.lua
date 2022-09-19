@@ -15,6 +15,16 @@ local UnitClass = UnitClass
 local wipe = wipe
 local hooksecurefunc = hooksecurefunc
 
+
+local HeroicActivityGroups = {
+	[288] = true, -- TBC Heroic
+	[289] = true, -- WOTLK Heroic
+	[290] = true, -- Vanilla Raids
+	[291] = true, -- TBC Raids
+	[292] = true, -- WOTLK Raids
+}
+
+local FrameLookup = {}
 local expansion = GetBuildInfo():sub(1,1)
 local maxLevel
 if expansion == "WOTLK" then
@@ -26,10 +36,10 @@ else
 end
 
 function ListingImprovements:OnInitialize()
-    self._lockedInstanceIds = {}
-	self._savedInstances = {}
-	self._dataRangeCallbackRegistered = false
-	self._lastCategoryId = nil
+	self._savedEntries = {} -- Object<EntryId, Name>
+	self._savedInstances = {} -- Array<Name>
+	self._dataRangeCallbackRegistered = false -- Boolean
+	self._lastCategoryId = nil -- Number
 end
 
 function ListingImprovements:OnEnable()
@@ -43,19 +53,20 @@ end
 function ListingImprovements:OnPlayerEnteringWorld()
 	self:UpdateAllowedRoles()
 
-	hooksecurefunc("LFGListingActivityView_UpdateActivities", function(frame, categoryId)
+	hooksecurefunc("LFGListingActivityView_UpdateActivities", function(frame, categoryId) -- Called on LFGListingActivityView being shown
 		self:OnUpdateListningsActivities(frame, categoryId)
 	end)
-	hooksecurefunc(LFGListingFrame, "SetAllActivitiesForActivityGroup", function(...)
-		self:OnSetAllActivitiesForActivityGroup(...)
-	end)
 
-	hooksecurefunc("LFGListingActivityView_InitActivityButton", function(frame)
-		self:SetScrollBoxStyle(frame)
-	end)
+	hooksecurefunc("LFGListingActivityView_InitActivityButton", function(buttonFrame) -- Called on all entries when a group's checkbutton is being clicked
+		local name = buttonFrame.NameButton.Name:GetText()
+		GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "Entry %q being changed due to group button", name)
 
-	hooksecurefunc("LFGListingActivityView_InitActivityGroupButton", function()
-		GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "LFGListingActivityView_InitActivityGroupButton")
+		for _, savedEntryname in pairs(self._savedEntries) do
+			if name == savedEntryname then
+				self:LockInstance(buttonFrame)
+				break
+			end
+		end
 	end)
 
 	LFGListingFrame:HookScript("OnShow", function(...) self:OnListningFrameShow(...) end)
@@ -84,6 +95,7 @@ function ListingImprovements:UpdateAllowedRoles()
 	end
 end
 
+-- Clear all saved instances and refresh
 function ListingImprovements:RefreshSavedInstances()
 	wipe(self._savedInstances)
 
@@ -96,40 +108,26 @@ function ListingImprovements:RefreshSavedInstances()
 	end
 end
 
-local HeroicActivityGroups = {
-	[288] = true, -- TBC Heroic
-	[289] = true, -- WOTLK Heroic
-	[290] = true, -- Vanilla Raids
-	[291] = true, -- TBC Raids
-	[292] = true, -- WOTLK Raids
-}
-
-function ListingImprovements:LockSavedInstances(categoryId)
-	local getAvailableActivities = C_LFGList.GetAvailableActivities
-	local getActivityInfoTable = C_LFGList.GetActivityInfoTable
-	local lockedInstanceIds = self._lockedInstanceIds
-
-	wipe(lockedInstanceIds)
+-- Map the saved instances with the entries in the current category
+function ListingImprovements:UpdateSavedEntries(categoryId)
+	local savedEntries = self._savedEntries
+	wipe(savedEntries)
 
 	local activityGroups = C_LFGList.GetAvailableActivityGroups(categoryId)
 	for i = 1, #activityGroups do
 		local activityGroupId = activityGroups[i]
-		
 		if HeroicActivityGroups[activityGroupId] then
-			local activities = getAvailableActivities(categoryId, activityGroupId)
-			if #activities > 0 then
-				lockedInstanceIds[activityGroupId] = {}
-				for j = 1, #activities do
-					local activityId = activities[j]
-					local activityInfo = getActivityInfoTable(activityId)
+			local activities = C_LFGList.GetAvailableActivities(categoryId, activityGroupId)
+			for j = 1, #activities do
+				local activityId = activities[j]
+				local activityInfo = C_LFGList.GetActivityInfoTable(activityId)
+				local name = activityInfo.shortName ~= "" and activityInfo.shortName or activityInfo.fullName
 
-					local name = activityInfo.shortName ~= "" and activityInfo.shortName or activityInfo.fullName
-					for i = 1, #self._savedInstances do
-						local savedName = self._savedInstances[i]
-						if string.find(savedName, name) then
-							self._lockedInstanceIds[activityGroupId][activityId] = name
-							break
-						end
+				for k = 1, #self._savedInstances do
+					local savedName = self._savedInstances[k]
+					if string.find(savedName, name) then
+						savedEntries[activityId] = name
+						break
 					end
 				end
 			end
@@ -137,9 +135,9 @@ function ListingImprovements:LockSavedInstances(categoryId)
 	end
 end
 
-function ListingImprovements:OnUpdateListningsActivities(frame, categoryId)
+function ListingImprovements:OnUpdateListningsActivities(frame, categoryId)  -- Called on LFGListingActivityView being shown
 	GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "OnUpdateListningsActivities")
-	self:LockSavedInstances(categoryId)
+	self:UpdateSavedEntries(categoryId)
 
 	if self._lastCategoryId ~= categoryId then
 		self:OnDataRangeChanged(frame)
@@ -151,25 +149,13 @@ function ListingImprovements:OnUpdateListningsActivities(frame, categoryId)
 	end, self)
 end
 
-local frameLookup = {}
-function ListingImprovements:OnSetAllActivitiesForActivityGroup(lFGListingFrame, activityGroupID, selected, userInput)
-	GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "OnSetAllActivitiesForActivityGroup")
-	local frames = LFGListingFrameActivityView.ScrollBox:GetFrames()
-	local activityIds = self._lockedInstanceIds[activityGroupID]
-	if activityIds then
-		for activityId, name in pairs(activityIds) do
-			local frame = frames[frameLookup[name]]
-			if frame then
-				self:SetScrollBoxEntryEnabled(frame, false, activityId)
-			end
-		end
-	end
-end
-
+-- Called when the data in the scroll frame is being changed. Either by opening the frame, scrolling, or expanding/collapsing a group
 function ListingImprovements:OnDataRangeChanged(scrollFrame)
 	GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "OnDataRangeChanged")
-	wipe(frameLookup)
+	wipe(FrameLookup)
 
+	-- Go through all frames, filter out all instances that you can get saved in
+	-- Store each frame based on their text
 	local frames = scrollFrame.ScrollBox:GetFrames()
 	for i = 1, #frames do
 		local frame = frames[i]
@@ -177,49 +163,32 @@ function ListingImprovements:OnDataRangeChanged(scrollFrame)
 		local parent = elementData.parent
 		local data = parent:GetData()
 
-		self:SetScrollBoxEntryEnabled(frame, true)
 		if data and HeroicActivityGroups[data.activityGroupID] then
-			frameLookup[frame.NameButton.Name:GetText()] = i
+			FrameLookup[frame.NameButton.Name:GetText()] = i
 		end
 	end
 
-	for activityGroupId, groupData in pairs(self._lockedInstanceIds) do
-		for activityId, name in pairs(groupData) do
-			local frame = frames[frameLookup[name]]
-			if frame then
-				self:SetScrollBoxEntryEnabled(frame, false, activityId)
-				self:SetScrollBoxStyle(frame)
-			end
+	-- Go through each saved instances, if the saved instance matches a frame then lock it
+	for _, name in pairs(self._savedEntries) do
+		local frame = frames[FrameLookup[name]]
+		if frame then
+			self:LockInstance(frame)
 		end
 	end
 end
 
+-- Called when the listing frame is being shown
 function ListingImprovements:OnListningFrameShow()
 	self:RefreshSavedInstances()
 end
 
-function ListingImprovements:SetScrollBoxEntryEnabled(frame, enabled, activityId)
-	if enabled then
-		frame.CheckButton:Enable()
-		frame.NameButton:Enable()
-		frame.NameButton.Name:SetFontObject("GameFontNormal")
-	else
-		frame.CheckButton:Disable()
-		frame.NameButton:Disable()
-		frame.CheckButton:SetChecked(false)
-
-		LFGListingFrame:SetActivity(activityId, false, false)
+local StringCache = {} -- Object<Name, Modified Name>
+function ListingImprovements:LockInstance(frame)
+	local name = frame.NameButton.Name:GetText()
+	local str = StringCache[name]
+	if not str then
+		str = string.format("|TInterface\\Buttons\\LockButton-Locked-Up:%d|t%s", frame.NameButton.Name:GetStringHeight() * 2, name)
+		StringCache[name] = str
 	end
-end
-
-function ListingImprovements:SetScrollBoxStyle(frame)
-	if frame.CheckButton:IsEnabled() then
-		frame.CheckButton:Enable()
-		frame.NameButton:Enable()
-		frame.NameButton.Name:SetFontObject("GameFontNormal")
-	else
-		frame.NameButton.Name:SetFontObject("GameFontDisable")
-		frame.CheckButton:SetDisabledTexture("Interface\\Buttons\\LockButton-Locked-Up")
-		frame.CheckButton:GetDisabledTexture():SetDesaturated(true)
-	end
+	frame.NameButton.Name:SetText(str)
 end
