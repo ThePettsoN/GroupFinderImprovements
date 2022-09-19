@@ -69,18 +69,46 @@ function ListingImprovements:OnPlayerEnteringWorld()
 		end
 	end)
 
+	hooksecurefunc(LFGListingFrame, "UpdatePostButtonEnableState", function(frame, isRecursive)
+		if not isRecursive then
+			self:CheckAllowedToPost()
+		end
+	end)
+
 	LFGListingFrame:HookScript("OnShow", function(...) self:OnListningFrameShow(...) end)
 end
 
 function ListingImprovements:OnConfigChanged(event, category, key, value, ...)
 end
 
+function ListingImprovements:CheckAllowedToPost()
+	if not self._roleButtons then
+		return
+	end
+
+	local anyChecked = false
+	for _, frame in pairs(self._roleButtons) do
+		if frame.CheckButton:GetChecked() then
+			anyChecked = true
+			break
+		end
+	end
+
+	if not anyChecked then
+		LFGListingFrame.PostButton:SetEnabled(false)
+	else
+		LFGListingFrame:UpdatePostButtonEnableState(true)
+	end
+end
+
 function ListingImprovements:UpdateAllowedRoles()
 	local _, class, _ = UnitClass("player")
 
-	-- Find the "role" frames in the LFG UI
-	local children = { LFGListingFrameSoloRoleButtons:GetChildren() }
-	for _, frame in pairs(children) do
+	if not self._roleButtons then
+		self._roleButtons = { LFGListingFrameSoloRoleButtons:GetChildren() }
+	end
+
+	for _, frame in pairs(self._roleButtons) do
 		if not Const.Roles[frame.roleID][class] then
 			local checkButton = frame.CheckButton
 			if checkButton then
@@ -92,6 +120,10 @@ function ListingImprovements:UpdateAllowedRoles()
 			frame:GetNormalTexture():SetDesaturated(true)
 			_G[frame:GetName() .. "Background"]:SetDesaturated(true)
 		end
+
+		frame.CheckButton:HookScript("OnClick", function()
+			self:CheckAllowedToPost()
+		end)
 	end
 end
 
