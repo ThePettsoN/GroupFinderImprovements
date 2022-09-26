@@ -57,14 +57,17 @@ function ListingImprovements:OnPlayerEnteringWorld()
 		self:OnUpdateListningsActivities(frame, categoryId)
 	end)
 
-	hooksecurefunc("LFGListingActivityView_InitActivityButton", function(buttonFrame) -- Called on all entries when a group's checkbutton is being clicked
+	hooksecurefunc("LFGListingActivityView_InitActivityButton", function(buttonFrame, data) -- Called on all entries when a group's checkbutton is being clicked
 		local name = buttonFrame.NameButton.Name:GetText()
 		GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "Entry %q being changed due to group button", name)
 
 		for _, savedEntryname in pairs(self._savedEntries) do
 			if name == savedEntryname then
-				self:LockInstance(buttonFrame)
-				break
+				local activityInfoTable = C_LFGList.GetActivityInfoTable(data.activityID)
+				if HeroicActivityGroups[activityInfoTable.categoryID] then
+					self:LockInstance(buttonFrame)
+					break
+				end
 			end
 		end
 	end)
