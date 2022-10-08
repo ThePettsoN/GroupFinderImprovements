@@ -21,7 +21,8 @@ local HeroicActivityGroups = {
 	[289] = true, -- WOTLK Heroic
 	[290] = true, -- Vanilla Raids
 	[291] = true, -- TBC Raids
-	[292] = true, -- WOTLK Raids
+	[292] = true, -- 10 WOTLK Raids
+	[293] = true, -- 25 WOTLK Raids
 }
 
 local FrameLookup = {}
@@ -137,9 +138,14 @@ function ListingImprovements:RefreshSavedInstances()
 	local numSavedInstances = GetNumSavedInstances()
 	GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "RefreshSavedInstances - num saved instances: %d", numSavedInstances)
 	for i = 1, numSavedInstances do
-		local name = GetSavedInstanceInfo(i)
+		local name, _, _, _, _, _, _, isRaid, maxPlayers = GetSavedInstanceInfo(i)
+		local groupId = maxPlayers == 25 and 293 or 
 		GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "RefreshSavedInstances - %q", name)
-		self._savedInstances[#self._savedInstances + 1] = name
+		self._savedInstances[#self._savedInstances + 1] = {
+			name = name,
+			isRaid = isRaid,
+			raidActivityGroupId = isRaid and (maxPlayers == 25 and 293 or 292) or nil
+		}
 	end
 end
 
@@ -159,10 +165,12 @@ function ListingImprovements:UpdateSavedEntries(categoryId)
 				local name = activityInfo.shortName ~= "" and activityInfo.shortName or activityInfo.fullName
 
 				for k = 1, #self._savedInstances do
-					local savedName = self._savedInstances[k]
-					if string.find(savedName, name) then
-						savedEntries[activityId] = name
-						break
+					local data = self._savedInstances[k]
+					if not data.isRaid or data.raidActivityGroupId == activityGroupId then
+						if string.find(data.name, name) then
+							savedEntries[activityId] = name
+							break
+						end
 					end
 				end
 			end
@@ -183,7 +191,7 @@ function ListingImprovements:OnUpdateListningsActivities(frame, categoryId)  -- 
 		self:OnDataRangeChanged(frame)
 	end, self)
 end
-
+test = nil
 -- Called when the data in the scroll frame is being changed. Either by opening the frame, scrolling, or expanding/collapsing a group
 function ListingImprovements:OnDataRangeChanged(scrollFrame)
 	GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "OnDataRangeChanged")
@@ -204,9 +212,10 @@ function ListingImprovements:OnDataRangeChanged(scrollFrame)
 	end
 
 	-- Go through each saved instances, if the saved instance matches a frame then lock it
-	for _, name in pairs(self._savedEntries) do
+	for id, name in pairs(self._savedEntries) do
 		local frame = frames[FrameLookup[name]]
-		if frame then
+		if frame and frame:GetElementData().data.activityID == id then
+			test = frame
 			self:LockInstance(frame)
 		end
 	end
@@ -219,7 +228,7 @@ end
 
 local StringCache = {} -- Object<Name, Modified Name>
 function ListingImprovements:LockInstance(frame)
-	local name = frame.NameButton.Name:GetText()
+	local name = frame:GetElementData().data.name
 	local str = StringCache[name]
 	if not str then
 		str = string.format("|TInterface\\Buttons\\LockButton-Locked-Up:%d|t%s", frame.NameButton.Name:GetStringHeight() * 2, name)
