@@ -139,7 +139,6 @@ function ListingImprovements:RefreshSavedInstances()
 	GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "RefreshSavedInstances - num saved instances: %d", numSavedInstances)
 	for i = 1, numSavedInstances do
 		local name, _, _, _, _, _, _, isRaid, maxPlayers = GetSavedInstanceInfo(i)
-		local groupId = maxPlayers == 25 and 293 or 
 		GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "RefreshSavedInstances - %q", name)
 		self._savedInstances[#self._savedInstances + 1] = {
 			name = name,
@@ -156,18 +155,21 @@ function ListingImprovements:UpdateSavedEntries(categoryId)
 
 	local activityGroups = C_LFGList.GetAvailableActivityGroups(categoryId)
 	for i = 1, #activityGroups do
+
 		local activityGroupId = activityGroups[i]
 		if HeroicActivityGroups[activityGroupId] then
+
 			local activities = C_LFGList.GetAvailableActivities(categoryId, activityGroupId)
 			for j = 1, #activities do
+
 				local activityId = activities[j]
 				local activityInfo = C_LFGList.GetActivityInfoTable(activityId)
 				local name = activityInfo.shortName ~= "" and activityInfo.shortName or activityInfo.fullName
-
 				for k = 1, #self._savedInstances do
+
 					local data = self._savedInstances[k]
 					if not data.isRaid or data.raidActivityGroupId == activityGroupId then
-						if string.find(data.name, name) then
+						if string.find(data.name, name:gsub("%-", "%%-")) then
 							savedEntries[activityId] = name
 							break
 						end
@@ -215,7 +217,6 @@ function ListingImprovements:OnDataRangeChanged(scrollFrame)
 	for id, name in pairs(self._savedEntries) do
 		local frame = frames[FrameLookup[name]]
 		if frame and frame:GetElementData().data.activityID == id then
-			test = frame
 			self:LockInstance(frame)
 		end
 	end
