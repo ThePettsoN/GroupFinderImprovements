@@ -84,7 +84,6 @@ function Gui:OnFrameVisibilityToggle(show)
         self._expandConfigButton:Show()
         self._collapseConfigButton:Hide()
     end
-
 end
 
 function Gui:_createFrame()

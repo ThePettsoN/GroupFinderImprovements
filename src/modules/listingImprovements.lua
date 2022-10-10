@@ -193,7 +193,6 @@ function ListingImprovements:OnUpdateListningsActivities(frame, categoryId)  -- 
 		self:OnDataRangeChanged(frame)
 	end, self)
 end
-test = nil
 -- Called when the data in the scroll frame is being changed. Either by opening the frame, scrolling, or expanding/collapsing a group
 function ListingImprovements:OnDataRangeChanged(scrollFrame)
 	GroupFinderImprovements:dprint(Debug.Severity.DEBUG, "OnDataRangeChanged")
