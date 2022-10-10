@@ -25,9 +25,6 @@ function BrowseImprovements:OnInitialize()
 	self._storedResults = {}
 	self._blacklistedPlayers = {}
 
-	self._contextMenuModified = false
-	self._contextMenuEntires = {}
-
 	self._filters = {
 		numMembers = { 0, 999 },
 		numTanks = { 0, 999 },
@@ -200,41 +197,23 @@ function BrowseImprovements:CheckFilterBlacklistPlayers(id, searchInfo)
 	return false
 end
 
-function BrowseImprovements:UpdateStoredResults()
-	if LFGBrowseFrame then
-		local dataProvider = CreateDataProvider()
-		local results = self._storedResults
-		for index = 1, #results do
-			dataProvider:Insert({ resultID = results[index] })
-		end
-
-		LFGBrowseFrame.ScrollBox:SetDataProvider(dataProvider, ScrollBoxConstants.RetainScrollPosition)
-	end
-end
-
 function BrowseImprovements:BlacklistPlayer(_, searchResultId, name)
 	GroupFinderImprovements:dprint(Debug.Severity.INFO, "Blacklist Player: Name: %q | id: %q", name, searchResultId)
 
 	GroupFinderImprovements.Db:SetProfileData(name, true, "blacklist")
-
-	for i = 1, #self._storedResults do
-		if self._storedResults[i] == searchResultId then
-			tremove(self._storedResults, i)
-			break
-		end
-	end
-
-	self:UpdateStoredResults()
+	self:RunFilters()
 end
 
 function BrowseImprovements:OnPlayerEnteringWorld()
     self:CreateRefreshButton()
 
-	hooksecurefunc("LFGBrowseUtil_SortSearchResults", function(results)
-		self:OnSortSearchResults(results)
+	-- UpdateResults
+	hooksecurefunc(LFGBrowseFrame, "UpdateResultList", function(frame)
+		self:OnSortSearchResults(frame.results)
 	end)
-	hooksecurefunc(LFGBrowseFrame, "GetSearchEntryMenu", function(frame, resultID)
-		self:OnGetSearchEntryMenu(frame, resultID)
+
+	hooksecurefunc("LFGBrowseSearchEntry_OnClick", function(frame, button)
+		self:OnLFGBrowseSearchEntryClick(frame, button)
 	end)
 end
 
@@ -277,19 +256,20 @@ function BrowseImprovements:OnLFGListSearchResultReceived(event, resultId)
 		return
 	end
 
-	local entriesFiltered = false
 	if self:CheckFilterSearchResult(resultId, searchInfo) or self:CheckFilterBlacklistPlayers(resultId, searchInfo) then
-		entriesFiltered = true
-		for i = 1, #self._storedResults do
-			if self._storedResults[i] == resultId then
-				tremove(self._storedResults, i)
-				break
+		local dataProvider = securecallfunction(LFGBrowseFrame.ScrollBox.GetDataProvider, LFGBrowseFrame.ScrollBox)
+		if not dataProvider then
+			return
+		end
+
+		local results = self._storedResults
+		for i = #results, 1, -1 do
+			if results[i] == resultId then
+				print("REMOVE")
+				securecallfunction(dataProvider.RemoveIndex, dataProvider, i)
+				tremove(results, i)
 			end
 		end
-	end
-
-	if entriesFiltered then
-		self:UpdateStoredResults()
 	end
 end
 
@@ -319,7 +299,7 @@ function BrowseImprovements:OnConfigChanged(event, category, key, value, ...)
 		end
 	end
 
-	self:RunFilters(self._storedResults)
+	self:RunFilters()
 end
 
 function BrowseImprovements:OnAutoRefreshTimerTick()
@@ -340,69 +320,68 @@ function BrowseImprovements:OnSortSearchResults(results)
 	end
 
 	GroupFinderImprovements:dprint(Debug.Severity.INFO, "OnSortSearchResults | Num Results: %d", #results)
-	self:RunFilters(results)
+	wipe(self._storedResults)
+	for i = 1, #results do
+		self._storedResults[i] = results[i]
+	end
+
+	self:RunFilters()
 end
 
-function BrowseImprovements:RunFilters(results)
+
+function BrowseImprovements:AddContextMenuButton(text, funcName, arg1, arg2)
+	local info = securecallfunction(UIDropDownMenu_CreateInfo)
+	info.text = text
+	info.notCheckable = true
+	info.icon = nil
+	info.arg1 = arg1
+	info.arg2 = arg2
+	info.func = function(...) self[funcName](self, ...) end
+	securecallfunction(UIDropDownMenu_AddButton, info)
+end
+
+function BrowseImprovements:OnLFGBrowseSearchEntryClick(frame, button)
+	if button == "RightButton" then
+		local searchResultInfo = C_LFGList.GetSearchResultInfo(frame.resultID)
+		local leaderName = searchResultInfo.leaderName
+
+		-- Create title
+		securecallfunction(UIDropDownMenu_AddButton, {
+			text = "GroupFinderImprovements",
+			isTitle = true,
+			notCheckable = true,
+		})
+
+		self:AddContextMenuButton("Who " .. leaderName, "WhoLookup", frame.resultID, leaderName)
+		self:AddContextMenuButton("Blacklist " .. leaderName, "BlacklistPlayer", frame.resultID, leaderName)
+		if GroupFinderImprovements:DebugEnabled() then
+			self:AddContextMenuButton("Debug " .. leaderName, "DebugEntry", frame.resultID, leaderName)
+		end
+	end
+end
+
+function BrowseImprovements:RunFilters()
+	if not LFGBrowseFrame then
+		return
+	end
+
 	local getSearchResultInfo = C_LFGList.GetSearchResultInfo
-	local entriesFiltered = false
+
+	local dataProvider = securecallfunction(LFGBrowseFrame.ScrollBox.GetDataProvider, LFGBrowseFrame.ScrollBox)
+	if not dataProvider then
+		return
+	end
+
+	local results = self._storedResults
 	for i = #results, 1, -1 do
 		local id = results[i]
 		local searchInfo = getSearchResultInfo(id)
 
 		if self:CheckFilterSearchResult(id, searchInfo) or self:CheckFilterBlacklistPlayers(id, searchInfo) then
+			securecallfunction(dataProvider.RemoveIndex, dataProvider, i)
 			tremove(results, i)
-			entriesFiltered = true
 		end
 	end
-
-	self._storedResults = results
-	if entriesFiltered then
-		self:UpdateStoredResults()
-	end
-end
-
-function BrowseImprovements:OnGetSearchEntryMenu(frame, resultId)
-	if not self._contextMenuModified then
-		self._contextMenuModified = true -- Need to be above everything else to prevent a infinite recursive loop
-		local menu = LFGBrowseFrame:GetSearchEntryMenu(resultId)
-
-		self:CreateContextMenuEntry(menu, "Who {leaderName}", "WhoLookup", true)
-		self:CreateContextMenuEntry(menu, "Blacklist {leaderName}", "BlacklistPlayer", true)
-		self:CreateContextMenuEntry(menu, "Debug Entry", "DebugEntry", false, true)
-	end
-
-	local searchResultInfo = C_LFGList.GetSearchResultInfo(resultId)
-	local leaderName = searchResultInfo.leaderName
-	for i = 1, #self._contextMenuEntires do
-		local entry = self._contextMenuEntires[i]
-		if entry.origText then
-			entry.text = entry.origText:gsub("{leaderName}", leaderName)
-		end
-
-		entry.arg1 = resultId
-		entry.arg2 = leaderName
-	end
-end
-
-function BrowseImprovements:CreateContextMenuEntry(menu, text, funcName, insertLeaderName, debugOnly) -- TODO: Might want to verify that we're not creating duplicates in the future
-	if debugOnly and not GroupFinderImprovements:DebugEnabled() then
-		return
-	end
-
-	GroupFinderImprovements:dprint(Debug.Severity.INFO, "Populating context menu with %q", text)
-	local entry = {
-		origText = insertLeaderName and text,
-		text = text,
-		notCheckable = true,
-		args1 = nil,
-		args2 = nil,
-		func = function(...) self[funcName](self, ...) end
-	}
-
-	self._contextMenuEntires[#self._contextMenuEntires + 1] = entry
-	tinsert(menu, #menu, entry) -- Always want to insert this at the second to last position as we want the 'Cancel' to remain last
-	return entry
 end
 
 function BrowseImprovements:WhoLookup(_, searchResultId, name)
