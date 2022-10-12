@@ -265,7 +265,6 @@ function BrowseImprovements:OnLFGListSearchResultReceived(event, resultId)
 		local results = self._storedResults
 		for i = #results, 1, -1 do
 			if results[i] == resultId then
-				print("REMOVE")
 				securecallfunction(dataProvider.RemoveIndex, dataProvider, i)
 				tremove(results, i)
 			end
