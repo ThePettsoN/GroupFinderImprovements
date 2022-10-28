@@ -93,10 +93,12 @@ end
 
 function ListingUI:OnActivityValueChanged(event, id, value)
     self:Debug("OnActivityValueChanged - id: %d | value: %s", id, tostring(value))
-    self._dirty = self._activities[id] ~= value
+    local dirty = self._activities[id] ~= value
     self._activities[id] = value or nil -- Want this to be true/nil to be able to do a next lookup
-
-    self:UpdateButtons()
+    if dirty ~= self._dirty then
+        self._dirty = dirty
+        self:UpdateButtons()
+    end
 end
 
 function ListingUI:OnLeftButtonClick()
@@ -168,6 +170,11 @@ function ListingUI:SetSoloRoles(roles)
 end
 
 function ListingUI:UpdateFrameView()
+    if not self._active then
+        self:Debug("UpdateFrameView - Not active")
+        return
+    end
+
     self:Debug("UpdateFrameView")
     self._bodyFrame:ReleaseChildren()
 
@@ -193,8 +200,12 @@ function ListingUI:UpdateFrameView()
 end
 
 function ListingUI:UpdateButtons()
-    self:Debug("UpdateButtons")
+    if not self._active then
+        self:Debug("UpdateButtons - Not Active")
+        return
+    end
 
+    self:Debug("UpdateButtons")
     if self._hasActiveEntryInfo then
         self:SendMessage("SetLeftButtonText", "Delist", true)
         self:SendMessage("SetRightButtonText", "Update", self._dirty)

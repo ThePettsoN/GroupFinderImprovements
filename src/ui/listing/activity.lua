@@ -49,6 +49,7 @@ local function sortEntries(lEntry, rEntry)
 end
 
 function ListingActivityUI:Populate(categoryId, activeEntryInfo)
+    self:Debug("Populate: categoryId: %d", categoryId)
     wipe(self._entires)
 
     local activities = CLFGList.GetAvailableActivities(categoryId, 0)
