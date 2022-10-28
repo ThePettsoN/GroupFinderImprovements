@@ -35,6 +35,19 @@ function ListingActivityUI:CreateUI(tabFrame)
     self._container = tabFrame
 end
 
+
+local function sortEntries(lEntry, rEntry)
+    if lEntry.orderIndex ~= rEntry.orderIndex then
+        return lEntry.orderIndex > rEntry.orderIndex
+    elseif lEntry.maxLevel ~= rEntry.maxLevel then
+        return lEntry.maxLevel > rEntry.maxLevel
+    elseif lEntry.minLevel ~= rEntry.minLevel then
+        return lEntry.minLevel > rEntry.minLevel
+    else
+        return strcmputf8i(lEntry.name, rEntry.name) < 0
+    end
+end
+
 function ListingActivityUI:Populate(categoryId, activeEntryInfo)
     wipe(self._entires)
 
@@ -49,6 +62,7 @@ function ListingActivityUI:Populate(categoryId, activeEntryInfo)
     local activeActivities = activeEntryInfo and activeEntryInfo.activityIDs
 
     local activityGroups = CLFGList.GetAvailableActivityGroups(categoryId)
+    local temp = {}
     for i = 1, #activityGroups do
         local activityGroupId = activityGroups[i]
         activities = CLFGList.GetAvailableActivities(categoryId, activityGroupId)
@@ -60,28 +74,39 @@ function ListingActivityUI:Populate(categoryId, activeEntryInfo)
             test:SetFullWidth(true)
             self._container:AddChild(test)
 
+            wipe(temp)
             for i = 1, #activities do
                 local activityId = activities[i]
                 local activityInfo = CLFGList.GetActivityInfoTable(activityId)
                 local name = activityInfo.shortName ~= "" and activityInfo.shortName or activityInfo.fullName
-
-                local entry = AceGUI:Create("CheckBox")
-                entry:SetLabel(name)
-                entry:SetFullWidth(true)
-                entry.activityId = activityId
-                entry:SetCallback("OnValueChanged", function(frame, event, value)
-                    self:SendMessage("ActivityValueChanged", activityId, value)
-                end)
-
-                if activeActivities and tContains(activeActivities, activityId) then
-                    entry:SetValue(true)
-                    self:SendMessage("ActivityValueChanged", activityId, true)
-                end
-
-                self._container:AddChild(entry)
-                self._entires[#self._entires+1] = entry
+                activityInfo.id = activityId
+                activityInfo.name = name
+                activityInfo.maxLevel = activityInfo.maxLevel ~= 0 and activityInfo.maxLevel or activityInfo.maxLevelSuggestion
+                temp[#temp + 1] = activityInfo
             end
 
+            table.sort(temp, sortEntries)
+
+            for i = 1, #temp do
+                local activityInfo = temp[i]
+                local name = activityInfo.name
+
+                local entry = AceGUI:Create("CheckBox")
+                entry:SetLabel(string.format("%s (%d - %d)", name, activityInfo.minLevel, activityInfo.maxLevel))
+                entry:SetFullWidth(true)
+                entry.activityId = activityInfo.id
+                entry:SetCallback("OnValueChanged", function(frame, event, value)
+                    self:SendMessage("ActivityValueChanged", activityInfo.id, value)
+                end)
+
+                if activeActivities and tContains(activeActivities, activityInfo.id) then
+                    entry:SetValue(true)
+                    self:SendMessage("ActivityValueChanged", activityInfo.id, true)
+                end
+
+                self._entires[#self._entires+1] = entry
+                self._container:AddChild(entry)
+            end
         end
     end
 end
