@@ -1,0 +1,30 @@
+## Interface: 30400
+## Title: GroupFinder
+## Author: ThePettsoN
+## Version: @project-version@
+## DefaultState: Enabled
+## LoadOnDemand: 0
+## SavedVariables: GroupFinderDB
+## X-Curse-Project-ID: 666681
+## X-Wago-ID: rkGrkANy
+
+embeds.xml
+
+src/core.lua
+
+src/widgets/AceGUILayout-OffsetList.lua
+src/widgets/AceGUIContainer-CollapsableInlineGroup.lua
+src/widgets/AceGUIContainer-EmptyInlineGroup.lua
+src/widgets/AceGUIWidget-RoleButton.lua
+src/widgets/AceGUIWidget-Divider.lua
+
+src/ui/MainUI.lua
+src/ui/ListingUI.lua
+src/ui/BrowseUI.lua
+
+src/ui/listing/header.lua
+src/ui/listing/overview.lua
+src/ui/listing/activity.lua
+
+src/ui/browse/header.lua
+src/ui/browse/body.lua
