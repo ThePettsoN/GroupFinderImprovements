@@ -174,7 +174,7 @@ function ListingUI:UpdateFrameView()
     else
         -- TODO: Show activities
         self._activity:CreateUI(self._bodyFrame)
-        self._activity:Populate(self._selectedCategory)
+        self._activity:Populate(self._selectedCategory, self._activeEntryInfo)
     end
 
     if IsInGroup(LE_PARTY_CATEGORY_HOME) then
