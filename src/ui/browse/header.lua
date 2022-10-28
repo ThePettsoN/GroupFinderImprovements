@@ -141,7 +141,6 @@ function BrowseHeaderUI:CreateSubMenu(groupName)
 
     local origClear = subMenu.Clear
     subMenu.Clear = function(self)
-        print("HEJ")
         origClear(self)
         if self.submenu then
             self.submenu:Clear()

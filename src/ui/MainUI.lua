@@ -138,8 +138,6 @@ function MainUI:ActivateView(view)
         return
     end
 
-    self:Debug("HEJ")
-
     if view == "listing" then
         self._browseUI:Deactivate()
     else
@@ -314,6 +312,7 @@ function MainUI:OnSetLeftButtonText(event, text, enabled)
 end
 
 function MainUI:OnSetRightButtonText(event, text, enabled)
+    self:Debug("OnSetRightButtonText: %s | %s", text, tostring(enabled))
     self._rightButton:SetText(text)
     self._rightButton:SetEnabled(enabled)
 end
