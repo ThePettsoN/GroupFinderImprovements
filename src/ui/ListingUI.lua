@@ -21,6 +21,7 @@ function ListingUI:OnInitialize()
     self._activeEntryInfo = nil
     self._hasActiveEntryInfo = false
     self._initialUICreated = false
+    self._dirty = false
 end
 
 function ListingUI:OnEnable()
@@ -65,6 +66,7 @@ function ListingUI:CreateUI(tabFrame)
     self._containerFrame = container
     self._bodyFrame = body
     self._initialUICreated = true
+    self._dirty = false
 end
 
 function ListingUI:Release()
@@ -90,8 +92,11 @@ function ListingUI:OnCategoryButtonClick(event, id)
 end
 
 function ListingUI:OnActivityValueChanged(event, id, value)
-    self:Debug("OnCategoryButtonClick - id: %d | value: %s", id, tostring(value))
-    self._activities[id] = value
+    self:Debug("OnActivityValueChanged - id: %d | value: %s", id, tostring(value))
+    self._dirty = self._activities[id] ~= value
+    self._activities[id] = value or nil -- Want this to be true/nil to be able to do a next lookup
+
+    self:UpdateButtons()
 end
 
 function ListingUI:OnLeftButtonClick()
@@ -145,6 +150,7 @@ end
 function ListingUI:SetActiveEntry(created, activeEntryInfo)
     self._activeEntryInfo = activeEntryInfo
     self._hasActiveEntryInfo = activeEntryInfo ~= nil
+    self._dirty = false
 
     if self._hasActiveEntryInfo then
         local activityInfo = CLFGList.GetActivityInfoTable(activeEntryInfo.activityIDs[1])
@@ -191,9 +197,11 @@ function ListingUI:UpdateButtons()
 
     if self._hasActiveEntryInfo then
         self:SendMessage("SetLeftButtonText", "Delist", true)
+        self:SendMessage("SetRightButtonText", "Update", self._dirty)
     else
         local active = self._selectedCategory ~= nil
         self:SendMessage("SetLeftButtonText", "Back", active)
+        self:SendMessage("SetRightButtonText", "List Self", next(self._activities))
     end
 end
 
