@@ -205,6 +205,10 @@ function BrowseImprovements:BlacklistPlayer(_, searchResultId, name)
 end
 
 function BrowseImprovements:OnPlayerEnteringWorld()
+	if self._autoRefreshButton then
+		return
+	end
+
     self:CreateRefreshButton()
 
 	-- UpdateResults

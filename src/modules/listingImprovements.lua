@@ -41,6 +41,7 @@ function ListingImprovements:OnInitialize()
 	self._savedInstances = {} -- Array<Name>
 	self._dataRangeCallbackRegistered = false -- Boolean
 	self._lastCategoryId = nil -- Number
+	self._initalized = false
 end
 
 function ListingImprovements:OnEnable()
@@ -52,6 +53,10 @@ function ListingImprovements:OnEnable()
 end
 
 function ListingImprovements:OnPlayerEnteringWorld()
+	if self._initalized then
+		return
+	end
+
 	self:UpdateAllowedRoles()
 
 	hooksecurefunc("LFGListingActivityView_UpdateActivities", function(frame, categoryId) -- Called on LFGListingActivityView being shown
@@ -80,6 +85,7 @@ function ListingImprovements:OnPlayerEnteringWorld()
 	end)
 
 	LFGListingFrame:HookScript("OnShow", function(...) self:OnListningFrameShow(...) end)
+	self._initalized = true
 end
 
 function ListingImprovements:OnConfigChanged(event, category, key, value, ...)
@@ -234,5 +240,5 @@ function ListingImprovements:LockInstance(frame)
 		str = string.format("|TInterface\\Buttons\\LockButton-Locked-Up:%d|t%s", frame.NameButton.Name:GetStringHeight() * 2, name)
 		StringCache[name] = str
 	end
-	frame.NameButton.Name:SetText(str)
+	-- frame.NameButton.Name:SetText(str)
 end
