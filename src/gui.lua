@@ -204,12 +204,14 @@ function Gui:_createBlacklistSection()
     end
 end
 
-function Gui:OnPlayerEnteringWorld()
-    self:_createFrame()
-    self:_createContainer()
-    self:_createRefreshSection()
-    self:_createMembersSection()
-    self:_createBlacklistSection()
+function Gui:OnPlayerEnteringWorld(event, isLogin, isReload)
+    if isLogin or isReload then
+        self:_createFrame()
+        self:_createContainer()
+        self:_createRefreshSection()
+        self:_createMembersSection()
+        self:_createBlacklistSection()
+    end
 end
 
 function Gui:_createGUI()
