@@ -92,7 +92,7 @@ function Gui:_createFrame()
     frame:EnableResize(false)
     frame:SetLayout("List")
 
-    frame.frame:SetParent("LFGBrowseFrame")
+    frame.frame:SetParent(LFGBrowseFrame)
     frame.frame:SetMovable(false)
     frame.titletext:GetParent():EnableMouse(false)
 
